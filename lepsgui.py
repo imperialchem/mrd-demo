@@ -315,7 +315,7 @@ class Interactive():
         button.grid(**grid_kwargs)
         for k, v in bind_kwargs.items():
             button.bind(k, v)
-        button.config(bg = "blue", **config_kwargs)
+        button.config(**config_kwargs)
         
     def _add_entry(self, frame, key, entry_kwargs={}, grid_kwargs={}, config_kwargs={}, attach_func=None):
         """Add a text entry"""
