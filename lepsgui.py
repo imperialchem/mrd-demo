@@ -1139,23 +1139,25 @@ class Interactive():
         plt.sca(ax)
         
         self.paused = False
-        pause_button = Button(ax, "Pause")
-        pause_button.on_clicked(self.toggle_pause)
+        self.pause_button = Button(ax, "Pause")
+        self.pause_button.on_clicked(self.toggle_pause)
 
         ax = axes["stop"]
         plt.sca(ax)
         
         self.stopped = False
-        pause_button = Button(ax, "Stop")
-        pause_button.on_clicked(self.stop)
+        self.stop_button = Button(ax, "Stop")
+        self.stop_button.on_clicked(self.stop)
         
         while not self.stopped:
             i = 0
             while i < len(self.t):
                 
-                while self.paused:
+                #Pause and listen for changes
+                while self.paused and not self.stopped:
                     plt.pause(0.1)
                     
+                #Code will break out of while loops if stop button pressed or fig closed
                 if self.stopped:
                     break
                     
@@ -1179,13 +1181,18 @@ class Interactive():
                 #Limit refresh to 50 FPS
                 plt.pause(0.02)
                 
-                i += 1
+                i += 2
                 
         plt.close('all')
         
     def toggle_pause(self, *args):
         if hasattr(self, "paused"):
-            self.paused = not self.paused
+            if self.paused:
+                self.pause_button.label.set_text("Pause")
+                self.paused = False
+            else:
+                self.pause_button.label.set_text("Play")
+                self.paused = True
         else:
             self.paused = True
             
