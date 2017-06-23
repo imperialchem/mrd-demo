@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 import matplotlib.collections as mcoll
 from matplotlib.animation import FuncAnimation
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.widgets import Button
 import warnings
 
 import tkinter as tk
@@ -180,10 +181,10 @@ class Interactive():
         
         if advanced:
             plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
-                "Internuclear Momenta vs Time", "Energy vs Time", "p(AB) vs p(BC)", "v(AB) vs v(BC)", "Animation"]     
+                "Internuclear Momenta vs Time", "Energy vs Time", "p(AB) vs p(BC)", "v(AB) vs v(BC)", "Animation", "Interactive"]     
         else:
             plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
-                "Internuclear Momenta vs Time", "Energy vs Time", "Animation"]     
+                "Internuclear Momenta vs Time", "Energy vs Time", "Animation", "Interactive"]     
         
         self._add_optionmenu(type_frame, "plot_type", plot_types , {}, gk('00'), {"width":20})
         
@@ -241,6 +242,7 @@ class Interactive():
         self._add_button(geometry_frame, {"text": "Plot"}, gk('400055'), {"<Button-1>": self.plot_eigen})
         
         ###First Run###
+        
         
         # Initialise params and info
         self.get_params()
@@ -315,7 +317,7 @@ class Interactive():
         button.grid(**grid_kwargs)
         for k, v in bind_kwargs.items():
             button.bind(k, v)
-        button.config(**config_kwargs)
+        button.config(bg = "blue", **config_kwargs)
         
     def _add_entry(self, frame, key, entry_kwargs={}, grid_kwargs={}, config_kwargs={}, attach_func=None):
         """Add a text entry"""
@@ -740,6 +742,8 @@ class Interactive():
             self.plot_velocities()
         elif self.plot_type == "Animation":
             self.animation()
+        elif self.plot_type == "Interactive":
+            self.plot_interactive()
             
     def plot_contour(self):    
         """Contour Plot"""
@@ -1004,6 +1008,192 @@ class Interactive():
             plt.show()
         except:
             pass
+        
+    def plot_interactive(self):
+        plt.close('all')
+        
+        self.all_fig = plt.figure('Interactive', figsize=(10,15))
+        
+        #If window is closed, stop running
+        self.all_fig.canvas.mpl_connect('close_event', self.stop)
+        
+        t0 = self.t[0]
+        
+        #Areas to fill with plots and widgets
+        rects = {
+        "contour" : [0.05, 0.70, 0.40, 0.25],
+        "evt"     : [0.55, 0.70, 0.40, 0.25],
+        "dvt"     : [0.05, 0.35, 0.40, 0.25],
+        "mvt"     : [0.55, 0.35, 0.40, 0.25],
+        "ani"     : [0.05, 0.10, 0.90, 0.20],
+        "pause"   : [0.05, 0.05, 0.15, 0.03],
+        "stop"    : [0.20, 0.05, 0.15, 0.03]
+        }
+        
+        #Get axes
+        axes = {}
+        for key, rect in rects.items():
+            ax = self.all_fig.add_axes(rect)
+
+            ax.get_xaxis().get_major_formatter().set_useOffset(False)
+            ax.get_yaxis().get_major_formatter().set_useOffset(False)                        
+            
+            axes[key] = ax
+        
+        #Contour        
+        ax = axes["contour"]
+        plt.sca(ax)
+        
+        plt.xlabel("AB Distance")
+        plt.ylabel("BC Distance")
+        
+        X, Y = np.meshgrid(self.x, self.y)
+        
+        levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
+        plt.contour(X, Y, self.Vmat, levels = levels)
+        plt.xlim([min(self.x),max(self.x)])
+        plt.ylim([min(self.y),max(self.y)])
+        
+        lc = colorline(self.xrab, self.xrbc, cmap = plt.get_cmap("jet"), linewidth=1)
+        
+        pos, = plt.plot([self.xrabi], [self.xrbci], marker='o', markersize=6, color="red")
+        
+        ax.add_collection(lc)
+        
+        
+        #Energy vs Time
+        ax = axes["evt"]
+        plt.sca(ax)
+        
+        plt.xlabel("Time")
+        plt.ylabel("Energy")
+
+        pot, = plt.plot(self.t, self.Vrint, label = "Potential Energy")
+        kin, = plt.plot(self.t, self.Ktot,  label = "Kinetic Energy")
+        
+        evt_bar, = plt.plot([t0, t0], ax.get_ylim())
+        
+        plt.legend(handles=[pot, kin])        
+        
+        
+        #Internuclear Distances vs Time
+        ax = axes["dvt"]
+        plt.sca(ax)
+        
+        plt.xlabel("Time")
+        plt.ylabel("Distance")
+        
+        ab, = plt.plot(self.t, self.xrab, label = "A-B")
+        bc, = plt.plot(self.t, self.xrbc, label = "B-C")
+        ac, = plt.plot(self.t, self.xrac, label = "A-C")
+        
+        dvt_bar, = plt.plot([t0, t0], ax.get_ylim())
+        
+        plt.legend(handles=[ab, bc, ac])
+        
+        
+        #Internuclear Momenta vs Time
+        ax = axes["mvt"]
+        plt.sca(ax)
+        
+        plt.xlabel("Time")
+        plt.ylabel("Momentum")
+        
+        momab = [v * self.mab for v in self.vrab]
+        mombc = [v * self.mbc for v in self.vrbc]
+        momac = [v * self.mac for v in self.vrac]
+
+        ab, = plt.plot(self.t, momab, label = "A-B")
+        bc, = plt.plot(self.t, mombc, label = "B-C")
+        ac, = plt.plot(self.t, momac, label = "A-C")
+        
+        mvt_bar, = plt.plot([t0, t0], ax.get_ylim())
+        
+        plt.legend(handles=[ab, bc, ac])
+        
+        
+        #Animation
+        ax = axes["ani"]
+        plt.sca(ax)
+        ax.set_xlim(min(self.ra, key=lambda x: x[0])[0] - 1, max(self.rc, key=lambda x: x[0])[0] + 1)
+        ax.set_ylim(min(self.ra, key=lambda x: x[1])[1] - 1, max(self.rc, key=lambda x: x[1])[1] + 1)
+        ax.set_aspect('equal')
+            
+        patches = []
+        
+        for at_name in ["a", "b", "c"]:
+            at = self.entries[at_name][0].get()
+            index, vdw, c = self.atom_map[at]
+            circle_pos = getattr(self, "r" + at_name)[0]
+            patch = plt.Circle(circle_pos, vdw * 0.25, fc = c)
+            patches.append(patch)
+        
+        ap, bp, cp = patches
+        ax.add_patch(ap)
+        ax.add_patch(bp)
+        ax.add_patch(cp)
+             
+        
+        #Widgets
+        ax = axes["pause"]
+        plt.sca(ax)
+        
+        self.paused = False
+        pause_button = Button(ax, "Pause")
+        pause_button.on_clicked(self.toggle_pause)
+
+        ax = axes["stop"]
+        plt.sca(ax)
+        
+        self.stopped = False
+        pause_button = Button(ax, "Stop")
+        pause_button.on_clicked(self.stop)
+        
+        while not self.stopped:
+            i = 0
+            while i < len(self.t):
+                
+                while self.paused:
+                    plt.pause(0.1)
+                    
+                if self.stopped:
+                    break
+                    
+                t = self.t[i]
+                min_x, max_x = axes["contour"].get_xlim()
+                min_y, max_y = axes["contour"].get_ylim()
+                
+                x = min(max(min_x, self.xrab[i]), max_x)
+                y = min(max(min_y, self.xrbc[i]), max_y)
+                
+                pos.set_data([x, y])            
+                
+                evt_bar.set_xdata([t, t])
+                dvt_bar.set_xdata([t, t])
+                mvt_bar.set_xdata([t, t])
+                
+                ap.center = self.ra[i]
+                bp.center = self.rb[i]
+                cp.center = self.rc[i]  
+                
+                #Limit refresh to 50 FPS
+                plt.pause(0.02)
+                
+                i += 1
+                
+        plt.close('all')
+        
+    def toggle_pause(self, *args):
+        if hasattr(self, "paused"):
+            self.paused = not self.paused
+        else:
+            self.paused = True
+            
+    def stop(self, *args):
+        if hasattr(self, "stopped"):
+            self.stopped = not self.stopped
+        else:
+            self.stopped = True
         
     def plot_init_pos(self, *args):
         """Cross representing initial geometry"""
