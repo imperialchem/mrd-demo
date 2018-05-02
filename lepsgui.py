@@ -633,9 +633,14 @@ class Interactive():
                 self.xrab.append(xrabf)                 #A-B Distance
                 self.xrbc.append(xrbcf)                 #B-C Distance
                 self.xrac.append(xracf)                 #A-C Distance
-                self.vrab.append(vrabf)                 #A-B Velocity
-                self.vrbc.append(vrbcf)                 #B-C Velocity
-                self.vrac.append(vrac)                  #A-C Velocity
+                if self.calc_type == "Dynamics":
+                    self.vrab.append(vrabf)                 #A-B Velocity
+                    self.vrbc.append(vrbcf)                 #B-C Velocity
+                    self.vrac.append(vrac)                  #A-C Velocity
+                else:
+                    self.vrab.append(0.)                    #A-B Velocity
+                    self.vrbc.append(0.)                    #B-C Velocity
+                    self.vrac.append(0.)                    #A-C Velocity
                 self.t.append(tf)                       #Time
                 
 
