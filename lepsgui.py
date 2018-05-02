@@ -869,9 +869,11 @@ class Interactive():
         
         Z = np.clip(self.Vmat, -10000, self.cutoff)
         
-        ax.plot_surface(X, Y, Z, rstride=self.spacing, cstride=self.spacing, cmap='jet', alpha=0.3, linewidth=0)
-        ax.contour(X, Y, Z, zdir='z', cmap='jet', stride=self.spacing, offset=np.min(Z) - 10)
-        ax.plot(self.xrab, self.xrbc, self.Vrint)
+        ax.plot_surface(X, Y, Z, rstride=self.spacing, cstride=self.spacing, cmap='jet', alpha=0.3, linewidth=0.25, edgecolor='black')
+
+        levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
+        ax.contour(X, Y, Z, zdir='z', levels=levels, offset=ax.get_zlim()[0]-1)
+        ax.plot(self.xrab, self.xrbc, self.Vrint, color='black', linestyle='none', marker='o', markersize=2)
          
         plt.draw()
         plt.pause(0.0001)
