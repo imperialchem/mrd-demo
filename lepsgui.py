@@ -1000,7 +1000,7 @@ class Interactive():
             at = self.entries[at_name][0].get()
             index, vdw, c = self.atom_map[at]
             pos = getattr(self, "r" + at_name)[0]
-            patch = plt.Circle(pos, vdw * 0.25, fc = c)
+            patch = plt.Circle(pos, vdw * 0.25, fc = "c")
             patches.append(patch)
         
         self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(self.ra), repeat=True, interval=20)
