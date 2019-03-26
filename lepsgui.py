@@ -315,7 +315,7 @@ class Interactive():
         button.grid(**grid_kwargs)
         for k, v in bind_kwargs.items():
             button.bind(k, v)
-        button.config(bg = "blue", **config_kwargs)
+        button.config(**config_kwargs)
         
     def _add_entry(self, frame, key, entry_kwargs={}, grid_kwargs={}, config_kwargs={}, attach_func=None):
         """Add a text entry"""
@@ -633,9 +633,14 @@ class Interactive():
                 self.xrab.append(xrabf)                 #A-B Distance
                 self.xrbc.append(xrbcf)                 #B-C Distance
                 self.xrac.append(xracf)                 #A-C Distance
-                self.vrab.append(vrabf)                 #A-B Velocity
-                self.vrbc.append(vrbcf)                 #B-C Velocity
-                self.vrac.append(vrac)                  #A-C Velocity
+                if self.calc_type == "Dynamics":
+                    self.vrab.append(vrabf)                 #A-B Velocity
+                    self.vrbc.append(vrbcf)                 #B-C Velocity
+                    self.vrac.append(vrac)                  #A-C Velocity
+                else:
+                    self.vrab.append(0.)                    #A-B Velocity
+                    self.vrbc.append(0.)                    #B-C Velocity
+                    self.vrac.append(0.)                    #A-C Velocity
                 self.t.append(tf)                       #Time
                 
 
@@ -864,9 +869,11 @@ class Interactive():
         
         Z = np.clip(self.Vmat, -10000, self.cutoff)
         
-        ax.plot_surface(X, Y, Z, rstride=self.spacing, cstride=self.spacing, cmap='jet', alpha=0.3, linewidth=0)
-        ax.contour(X, Y, Z, zdir='z', cmap='jet', stride=self.spacing, offset=np.min(Z) - 10)
-        ax.plot(self.xrab, self.xrbc, self.Vrint)
+        ax.plot_surface(X, Y, Z, rstride=self.spacing, cstride=self.spacing, cmap='jet', alpha=0.3, linewidth=0.25, edgecolor='black')
+
+        levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
+        ax.contour(X, Y, Z, zdir='z', levels=levels, offset=ax.get_zlim()[0]-1)
+        ax.plot(self.xrab, self.xrbc, self.Vrint, color='black', linestyle='none', marker='o', markersize=2)
          
         plt.draw()
         plt.pause(0.0001)
