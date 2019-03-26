@@ -40,43 +40,34 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
     prac = vraci*mac
     
     # G-Matrix
-    y1 = 1/ma
-    y2 = 1/mb
-    y3 = 1/mc
+    # See E. B. Wildon Jr., J. C. Decius and P. C. Cross "Molecular Vibrations", McGraw-Hill (1955), sec. 4-6
 
-    GM = np.zeros((3,3))
-    GM[0][0]=y1+y2
-    GM[0][1]=y2*np.cos(theta)
-    GM[1][0]=GM[0][1]
-    GM[1][1]=y3+y2
-    GM[0][2]=-y2*np.sin(theta)/drbc
-    GM[2][0]=GM[0][2]
-    GM[1][2]=-y2*np.sin(theta)/drab
-    GM[2][1]=GM[1][2]
-    gmt=1/(drab ** 2)+1/(drbc ** 2)-(2*np.cos(theta)/(drab*drbc))
-    GM[2][2]=y1/(drab ** 2)+y3/(drbc ** 2)+y2*gmt
+    GM=np.array([[1/ma + 1/mb, np.cos(theta)/mb, -np.sin(theta)/(drbc*mb)],
+                 [np.cos(theta)/mb, 1/mb + 1/mc, -np.sin(theta)/(drab*mb)],
+                 [-np.sin(theta)/(drbc*mb), -np.sin(theta)/(drab*mb), 1/(drab**2 * ma) + 1/(drbc**2 * mc) + 1/(drab**2 * mb) + 1/(drbc**2 * mb) -2*np.cos(theta)/(drab*drbc*mb)]])
+
     
     GMVal, GMVec = np.linalg.eig(GM)
-    GMVal = np.diag(GMVal)
-    GMVal1 = GMVal ** 0.5
-    GMVal2 = np.diag(np.diag(GMVal) ** -0.5)
-    GRR    = np.dot(np.dot(GMVec, GMVal1), GMVec.T)
-    GROOT  = np.dot(np.dot(GMVec, GMVal2), GMVec.T)
+
+    GMVal1 = GMVal ** 0.5    # 1/sqrt(mass) for each mode
+    GMVal2 = GMVal ** (-0.5) # sqrt(mass) for each mode
+
+    GRR    = GMVec.dot(np.diag(GMVal1)).dot(GMVec.T)
+    GROOT  = GMVec.dot(np.diag(GMVal2)).dot(GMVec.T)
 
     # G-Matrix Weighted Hessian;
-    MWH = np.dot(np.dot(GRR, hessian), GRR)
+    MWH = GRR.dot(hessian).dot(GRR)
     W2, ALT = np.linalg.eig(MWH); #ALT is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
     
     # Gradient Vector in mass-weighted coordinates
     GRAD = np.array([-Frab, -Frbc, -Frac])
-    GRADN = np.dot(ALT.T ,np.dot(GRR, GRAD))
+    GRADN = ALT.T.dot(GRR).dot(GRAD)
     
     # Momentum Vector in Normal Coordinates
     MOM = np.array([prab, prbc, prac])
+    PCMO = ALT.T.dot(GRR).dot(MOM)
     
-    PCMO = np.dot(ALT.T,np.dot(GRR, MOM))
-    
-    ktot = 0.5 * (PCMO[0] ** 2 + PCMO[1] ** 2 + PCMO[2] ** 2)
+    ktot = 0.5 * np.linalg.norm(PCMO)**2
     
     q = np.zeros((3))
     for i in range(3):
@@ -94,7 +85,7 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
             q[i] = PCMO[i] * np.sin(wroot * dt) / wroot - tfn1
             PCMO[i] = PCMO[i] * np.cos(wroot * dt) - GRADN[i] * np.sin(wroot * dt) / wroot
             
-    XX = np.dot(GRR, np.dot(ALT, q.T))
+    XX = GRR.dot(ALT).dot(q.T)
         
     if MEP:
       XX *= 5
@@ -105,7 +96,7 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
     drbcf = drbc + XX[1]
     thetaf = theta + XX[2]
     dracf = ((drab ** 2) + (drbc ** 2) - 2 * drab * drbc * np.cos(thetaf)) ** 0.5
-    MOM = np.dot(np.dot(GROOT, ALT), PCMO)
+    MOM = GROOT.dot(ALT).dot(PCMO)
     
     tf = ti + dt
     vrabf = MOM[0] / mab
