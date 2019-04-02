@@ -1,18 +1,19 @@
-# Molecular Reaction Dynamics
-Demonstration of classical molecular reaction dynamics for a tri-atomic system
+# LpesPy: A Molecular Reaction Dynamics Demonstration
+A program to perform classical molecular reaction dynamics for a tri-atomic system using a London-Eyring-Polanyi-Sato (LEPS) potential parameterised for several atoms.
 
-### Downloading
+The first Python version of the code was written by Tristan Mackenzie, based on a Matlab version written by Lee Thomson, which in tern built upon a Fortran code written by Barry Smith.
 
-Click on the **Clone or download** button to the right and download the zip file. The folder can be unzipped in your home folder.
+### Running the program
 
+Click on the **Clone or download** button to the right and download the zip archive with all the progeam files. You need to unpack the folder before you can run the program.
 
-### Starting the GUI 
+The program is run through a graphical user interface (GUI) which is started by running the file **lepsgui.py**.
 
-#### Windows
+#### On Windows
 
 Double click on the **lepsgui.py** file to start the GUI.
 
-#### LINUX and OSX
+#### On Linux and OSX
 
 In a terminal, change directory to the LepsPy directory and execute "python lepsgui.py".
 
