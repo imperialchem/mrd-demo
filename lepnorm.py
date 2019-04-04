@@ -55,15 +55,19 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
     GRR    = GMVec.dot(np.diag(GMVal1)).dot(GMVec.T)
     GROOT  = GMVec.dot(np.diag(GMVal2)).dot(GMVec.T)
 
+    # Transform into normal modes and do dynamics in normal modes
+    # Follow dynamics algorithm in:
+    # T. Helgaker, E. Uggerud, H.J. Aa. Jensen, Chem. Phys Lett. 173(2,3):145-150 (1990)
+
     # G-Matrix Weighted Hessian;
     MWH = GRR.dot(hessian).dot(GRR)
     W2, ALT = np.linalg.eig(MWH); #ALT is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
     
-    # Gradient Vector in mass-weighted coordinates
+    # Gradient Vector in mass-weighted normal modes
     GRAD = np.array([-Frab, -Frbc, -Frac])
     GRADN = ALT.T.dot(GRR).dot(GRAD)
     
-    # Momentum Vector in Normal Coordinates
+    # Momentum Vector in normal modes
     MOM = np.array([prab, prbc, prac])
     PCMO = ALT.T.dot(GRR).dot(MOM)
     
@@ -73,19 +77,17 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
     for i in range(3):
         if W2[i] < - epsilon:
             wmod = abs(W2[i]) ** 0.5
-            wmt = wmod * dt
-            q[i]=PCMO[i] * np.sinh(wmt) / wmod + GRADN[i] * (1 - np.cosh(wmt)) / (wmod ** 2)
-            PCMO[i] = PCMO[i] * np.cosh(wmt) - GRADN[i] * np.sinh(wmt) / wmod
+            q[i]=PCMO[i] * np.sinh(wmod*dt) / wmod + GRADN[i] * (1 - np.cosh(wmod*dt)) / (wmod**2)
+            PCMO[i] = PCMO[i] * np.cosh(wmod*dt) - GRADN[i] * np.sinh(wmod*dt) / wmod
         elif abs(W2[i]) < epsilon:
             q[i] = PCMO[i] * dt - (0.5 * GRADN[i] * (dt ** 2))
             PCMO[i] = PCMO[i] - GRADN[i] * dt
         else:
-            wroot =W2[i] ** 0.5
-            tfn1 = GRADN[i] * (1 - np.cos(wroot * dt)) / (wroot ** 2)
-            q[i] = PCMO[i] * np.sin(wroot * dt) / wroot - tfn1
-            PCMO[i] = PCMO[i] * np.cos(wroot * dt) - GRADN[i] * np.sin(wroot * dt) / wroot
+            wroot =W2[i] ** 0.5 
+            q[i]=PCMO[i] * np.sin(wroot*dt) / wroot - GRADN[i] * (1 - np.cos(wroot*dt)) / (wroot**2)
+            PCMO[i] = PCMO[i] * np.cos(wroot*dt) - GRADN[i] * np.sin(wroot*dt) / wroot
             
-    XX = GRR.dot(ALT).dot(q.T)
+    XX = GRR.dot(ALT).dot(q)
         
     if MEP:
       XX *= 5
