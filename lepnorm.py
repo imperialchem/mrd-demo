@@ -26,35 +26,39 @@ import numpy as np
 
 epsilon = 1.0E-15
 
-def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,hr2r2,hr2r3,hr3r3,ma,mb,mc,ti,dt,MEP):
+# Using jit to speed up code
+def use_jit(signature_or_function, nopython):
+    def decorator(func):
+        try:
+            import numba
+            print("Using jit for {0}".format(func.__name__))
+            return numba.jit(signature_or_function=signature_or_function,nopython=nopython)(func)
+        except:
+            print("Not using jit for {0}".format(func.__name__))
+            return func
+    return decorator
 
-    hessian = np.array([[hr1r1, hr1r2, hr1r3], [hr1r2, hr2r2, hr2r3], [hr1r3, hr2r3, hr3r3]])
-    
-    # Reduced masses.
-    mab = (ma*mb)/(ma+mb)
-    mbc = (mb*mc)/(mb+mc)
-    mac = (ma*mc)/(ma+mc)
+@use_jit("Tuple((float64,float64))(float64,float64[:],float64[:],float64[:,:],float64[:],float64[:],float64[:],float64[:],float64,boolean)", nopython=True)
+def lepnorm(theta,Displacements,First_derivative,Hessian,Velocities,Accelerations,Masses,Reduced_Masses,dt,MEP):
 
-    prab = vrabi*mab
-    prbc = vrbci*mbc
-    prac = vraci*mac
+    Momenta = Reduced_Masses * Velocities
     
     # G-Matrix
-    y1 = 1/ma
-    y2 = 1/mb
-    y3 = 1/mc
+    y1 = 1/Masses[0]
+    y2 = 1/Masses[1]
+    y3 = 1/Masses[2]
 
     GM = np.zeros((3,3))
     GM[0][0]=y1+y2
     GM[0][1]=y2*np.cos(theta)
     GM[1][0]=GM[0][1]
     GM[1][1]=y3+y2
-    GM[0][2]=-y2*np.sin(theta)/drbc
+    GM[0][2]=-y2*np.sin(theta)/Displacements[1]
     GM[2][0]=GM[0][2]
-    GM[1][2]=-y2*np.sin(theta)/drab
+    GM[1][2]=-y2*np.sin(theta)/Displacements[0]
     GM[2][1]=GM[1][2]
-    gmt=1/(drab ** 2)+1/(drbc ** 2)-(2*np.cos(theta)/(drab*drbc))
-    GM[2][2]=y1/(drab ** 2)+y3/(drbc ** 2)+y2*gmt
+    gmt=1/(Displacements[0] ** 2)+1/(Displacements[1] ** 2)-(2*np.cos(theta)/(Displacements[0]*Displacements[1]))
+    GM[2][2]=y1/(Displacements[0] ** 2)+y3/(Displacements[1] ** 2)+y2*gmt
     
     GMVal, GMVec = np.linalg.eig(GM)
     GMVal = np.diag(GMVal)
@@ -64,17 +68,14 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
     GROOT  = np.dot(np.dot(GMVec, GMVal2), GMVec.T)
 
     # G-Matrix Weighted Hessian;
-    MWH = np.dot(np.dot(GRR, hessian), GRR)
-    W2, ALT = np.linalg.eig(MWH); #ALT is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
+    MWH = np.dot(np.dot(GRR, Hessian), GRR)
+    W2, ALT = np.linalg.eig(MWH) #ALT is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
     
     # Gradient Vector in mass-weighted coordinates
-    GRAD = np.array([-Frab, -Frbc, -Frac])
+    GRAD = -First_derivative
     GRADN = np.dot(ALT.T ,np.dot(GRR, GRAD))
     
-    # Momentum Vector in Normal Coordinates
-    MOM = np.array([prab, prbc, prac])
-    
-    PCMO = np.dot(ALT.T,np.dot(GRR, MOM))
+    PCMO = np.dot(ALT.T,np.dot(GRR, Momenta))
     
     ktot = 0.5 * (PCMO[0] ** 2 + PCMO[1] ** 2 + PCMO[2] ** 2)
     
@@ -101,22 +102,22 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
       
       
         
-    drabf = drab + XX[0]
-    drbcf = drbc + XX[1]
+    Displacements[0] += XX[0]
+    Displacements[1] += XX[1]
     thetaf = theta + XX[2]
-    dracf = ((drab ** 2) + (drbc ** 2) - 2 * drab * drbc * np.cos(thetaf)) ** 0.5
-    MOM = np.dot(np.dot(GROOT, ALT), PCMO)
+    Displacements[2] = ((Displacements[0] ** 2) + (Displacements[1] ** 2) - 2 * Displacements[0] * Displacements[1] * np.cos(thetaf)) ** 0.5
+    Momenta = np.dot(np.dot(GROOT, ALT), PCMO)
     
-    tf = ti + dt
-    vrabf = MOM[0] / mab
-    vrbcf = MOM[1] / mbc
-    vracf = 0
+    Velocities[0] = Momenta[0] / Reduced_Masses[0]
+    Velocities[1] = Momenta[1] / Reduced_Masses[1]
+    # This line needs to be changed
+    Velocities[2] = 0
     
-    arab = Frab / mab
-    arbc = Frbc / mbc
-    if (arab + arbc < 0):
-        arac = - ((arab ** 2) + (arbc ** 2) - 2 * arab * arbc * np.cos(thetaf)) ** 0.5
+    Accelerations[0] = First_derivative[0] / Reduced_Masses[0]
+    Accelerations[1] = First_derivative[1] / Reduced_Masses[1]
+    if (Accelerations[0] + Accelerations[1] < 0):
+        Accelerations[2] = - ((Accelerations[0] ** 2) + (Accelerations[1] ** 2) - 2 * Accelerations[0] * Accelerations[1] * np.cos(thetaf)) ** 0.5
     else:
-        arac =   ((arab ** 2) + (arbc ** 2) - 2 * arab * arbc * np.cos(thetaf)) ** 0.5
+        Accelerations[2] =   ((Accelerations[0] ** 2) + (Accelerations[1] ** 2) - 2 * Accelerations[0] * Accelerations[1] * np.cos(thetaf)) ** 0.5
     
-    return drabf,drbcf,dracf,thetaf,vrabf,vrbcf,vracf,tf,arab,arbc,arac,ktot
+    return thetaf,ktot

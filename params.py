@@ -23,94 +23,109 @@ Created on Wed May 17 11:30:28 2017
 """
 
 from configparser import ConfigParser
+import numpy as np
 
-def _get_mass(config, key):
-    
-    try:
-        d = config['atoms']
-        l = d[key]
-        m = float(l.split(',')[0])
-    except KeyError:
-        raise KeyError('Mass not available for atom type {}'.format(key))
-    except:
-        raise RuntimeError('Parameter file corrupted. Cannot get mass for atom type {}'.format(key))
-    
-    return m
-    
-def _get_morse(config, key):
-    
-    try:
-        d = config['morse']
-        m = d[key]
-        m = [float(p) for p in m.split(',')]
-        assert len(m) == 3
-    except KeyError:
-        raise KeyError('Morse potential not available for atom pair {}'.format(key))
-    except:
-        raise RuntimeError('Parameter file corrupted. Cannot get morse parater for atom pair {}'.format(key))
-    
-    return m
-    
-def _get_limits(config, key):
-    
-    try:
-        d = config['limits']
-        l = d[key]
-        l = [float(p) for p in l.split(',')]
-        assert len(l) == 4
-    except KeyError:
-        raise KeyError('Limits not available for atoms {}'.format(key))
-    except:
-        raise RuntimeError('Parameter file corrupted. Cannot get morse parater for atom pair {}'.format(key))
-    
-    return l
+class Params():
+    def __init__(self, a, b, c):
 
-def params(a,b,c):
+        # Gets the parameters for any atom set or returns error message if no
+        # parameters exist.
+        
+        #Open parameter file
+        config = ConfigParser(inline_comment_prefixes=(';', '#'))
+        config.read('params.ini')
+        try:
+            isotopes = config['isotopes']
+        except:
+            isotopes = {}
+        
+        # labels:
+        # H F Cl D I O
+        # 1 2 3  4 5 6
+        
+        
+        self.name_a   = str(a)
+        self.name_b   = str(b)
+        self.name_c   = str(c)
+        self.name_ab  = (self.name_a + self.name_b)
+        self.name_bc  = (self.name_b + self.name_c)
+        self.name_ac  = (self.name_a + self.name_c)
+        self.name_abc = (self.name_a + self.name_b + self.name_c)
+        
+        #Replace atoms set by the isotopes section in parameters file
+        
+        for i, o in isotopes.items():
+            self.ab  = self.name_ab. replace(i, o)
+            self.bc  = self.name_bc. replace(i, o)
+            self.ac  = self.name_ac. replace(i, o)
+            self.abc = self.name_abc.replace(i, o)
 
-    # Gets the parameters for any atom set or returns error message if no
-    # parameters exist.
-    
-    #Open parameter file
-    config = ConfigParser(inline_comment_prefixes=(';', '#'))
-    config.read('params.ini')
-    try:
-        isotopes = config['isotopes']
-    except:
-        isotopes = {}
-    
-    # labels:
-    # H F Cl D I O
-    # 1 2 3  4 5 6
-    
-    
-    a   = str(a)
-    b   = str(b)
-    c   = str(c)
-    ab  = (a + b)
-    bc  = (b + c)
-    ac  = (a + c)
-    abc = (a + b + c)
-    
-    #Replace atoms set by the isotopes section in parameters file
-    
-    for i, o in isotopes.items():
-        ab  =  ab.replace(i, o)
-        bc  =  bc.replace(i, o)
-        ac  =  ac.replace(i, o)
-        abc = abc.replace(i, o)
+        # Masses
+        self.mass_a = self._get_mass(config, self.name_a)
+        self.mass_b = self._get_mass(config, self.name_b)
+        self.mass_c = self._get_mass(config, self.name_c)
+        
+        self.Masses = np.array([self.mass_a,self.mass_b,self.mass_c])
 
-    # Masses
-    ma = _get_mass(config, a)
-    mb = _get_mass(config, b)
-    mc = _get_mass(config, c)
-    
+        self.reduced_mass_ab = (self.mass_a * self.mass_b) / (self.mass_a + self.mass_b)
+        self.reduced_mass_bc = (self.mass_b * self.mass_c) / (self.mass_b + self.mass_c)
+        self.reduced_mass_ac = (self.mass_a * self.mass_c) / (self.mass_a + self.mass_c)
 
-    # Morse Parameters
-    Drab, lrab, Brab = _get_morse(config, ab)
-    Drbc, lrbc, Brbc = _get_morse(config, bc)
-    Drac, lrac, Brac = _get_morse(config, ac)
-     
-    # Plot Limits
-    mina, maxa, minb, maxb = _get_limits(config, abc)
+        self.Reduced_masses = np.array([self.reduced_mass_ab,self.reduced_mass_bc,self.reduced_mass_ac])
 
-    return ma,mb,mc,Drab,Drbc,Drac,lrab,lrbc,lrac,Brab,Brbc,Brac,mina,maxa,minb,maxb
+        self.total_mass = self.mass_a + self.mass_b + self.mass_c
+
+        # Morse Parameters
+        Drab, lrab, Brab = self._get_morse(config, self.ab)
+        Drbc, lrbc, Brbc = self._get_morse(config, self.bc)
+        Drac, lrac, Brac = self._get_morse(config, self.ac)
+
+        self.Dissociation_energies = np.array([Drab,Drbc,Drac])
+        self.Reqs = np.array([lrab,lrbc,lrac])
+        self.Morse_Parameters = np.array([Brab,Brbc,Brac])
+        
+        # Plot Limits
+        self.mina, self.maxa, self.minb, self.maxb = self._get_limits(config, self.abc)
+
+        self.surface_param = 0.424
+
+    def _get_mass(self, config, key):
+        
+        try:
+            d = config['atoms']
+            l = d[key]
+            m = float(l.split(',')[0])
+        except KeyError:
+            raise KeyError('Mass not available for atom type {}'.format(key))
+        except:
+            raise RuntimeError('Parameter file corrupted. Cannot get mass for atom type {}'.format(key))
+        
+        return m
+        
+    def _get_morse(self, config, key):
+        
+        try:
+            d = config['morse']
+            m = d[key]
+            m = [float(p) for p in m.split(',')]
+            assert len(m) == 3
+        except KeyError:
+            raise KeyError('Morse potential not available for atom pair {}'.format(key))
+        except:
+            raise RuntimeError('Parameter file corrupted. Cannot get morse parater for atom pair {}'.format(key))
+        
+        return m
+        
+    def _get_limits(self, config, key):
+        
+        try:
+            d = config['limits']
+            l = d[key]
+            l = [float(p) for p in l.split(',')]
+            assert len(l) == 4
+        except KeyError:
+            raise KeyError('Limits not available for atoms {}'.format(key))
+        except:
+            raise RuntimeError('Parameter file corrupted. Cannot get morse parater for atom pair {}'.format(key))
+        
+        return l

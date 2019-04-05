@@ -24,20 +24,36 @@ Created on Wed May 17 10:41:56 2017
 
 import numpy as np
 
-def lepspoint(drab,drbc,theta,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,H,grad):
+# Using jit to speed up code
+def use_jit(signature_or_function, nopython):
+    def decorator(func):
+        try:
+            import numba
+            print("Using jit for {0}".format(func.__name__))
+            return numba.jit(signature_or_function=signature_or_function,nopython=nopython)(func)
+        except:
+            print("Not using jit for {0}".format(func.__name__))
+            return func
+    return decorator
 
-# Gives the Energy and first derivative and Hessian at any point on LEPS surface.
+@use_jit("float64(float64,float64[:],float64[:],float64[:],float64,float64[:],float64[:],float64[:,:],int32)", nopython=True)
+def lepspoint(theta,Dissociation_energies,Reqs,Morse_Parameters,surface_parameter,Separations,First_derivative,Hessian,derivative=0):
+
+    # Gives the energy, First_derivative derivative and Hessian at any point on LEPS surface.
+
+    R  = Separations
     
-    drac = ((drab ** 2) + (drbc ** 2) - 2 * drab * drbc * np.cos(theta)) ** 0.5
+    R[2] = ((R[0] ** 2) + (R[1] ** 2) - 2 * R[0] * R[1] * np.cos(theta)) ** 0.5
 
     #ENERGY
     # morse (y) and anti morse (z) functions
-    ydrab =  Drab      * (np.exp(-2 * Brab * (drab - lrab)) - (2 * np.exp(-Brab * (drab - lrab))))
-    zdrab = (Drab / 2) * (np.exp(-2 * Brab * (drab - lrab)) + (2 * np.exp(-Brab * (drab - lrab))))
-    ydrbc =  Drbc      * (np.exp(-2 * Brbc * (drbc - lrbc)) - (2 * np.exp(-Brbc * (drbc - lrbc))))
-    zdrbc = (Drbc / 2) * (np.exp(-2 * Brbc * (drbc - lrbc)) + (2 * np.exp(-Brbc * (drbc - lrbc))))
-    ydrac =  Drac      * (np.exp(-2 * Brac * (drac - lrac)) - (2 * np.exp(-Brac * (drac - lrac))))
-    zdrac = (Drac / 2) * (np.exp(-2 * Brac * (drac - lrac)) + (2 * np.exp(-Brac * (drac - lrac))))
+    M = Morse_Parameters * (R - Reqs)
+    ydrab =  Dissociation_energies[0]      * (np.exp(-2 * M[0]) - (2 * np.exp(-M[0])))
+    zdrab = (Dissociation_energies[0] / 2) * (np.exp(-2 * M[0]) + (2 * np.exp(-M[0])))
+    ydrbc =  Dissociation_energies[1]      * (np.exp(-2 * M[1]) - (2 * np.exp(-M[1])))
+    zdrbc = (Dissociation_energies[1] / 2) * (np.exp(-2 * M[1]) + (2 * np.exp(-M[1])))
+    ydrac =  Dissociation_energies[2]      * (np.exp(-2 * M[2]) - (2 * np.exp(-M[2])))
+    zdrac = (Dissociation_energies[2] / 2) * (np.exp(-2 * M[2]) + (2 * np.exp(-M[2])))
     
     # Coulomb (Q) and Exchange (J) integrals
     k = 0.18 # In TRIATOMICS this is 0.18 but should be sato parameter?
@@ -49,64 +65,48 @@ def lepspoint(drab,drbc,theta,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,H,gra
     Jdrac = (ydrac - zdrac + k * (ydrac + zdrac)) / 2
     
     # Potential Energy
-    sq = H ** 2
+    sq = surface_parameter ** 2
     ist = 1 # 1 for ground state, >1 for excited states
     FKK = 0.5 * ((Jdrab - Jdrbc) ** 2 + (Jdrbc - Jdrac) ** 2 + (Jdrac - Jdrab) ** 2)
     V = 1 / (1 + sq) * (Qdrab + Qdrbc + Qdrac - ist * (FKK ** 0.5))
     
-    r  = np.zeros((3))
-    dd = np.zeros((3))
-    fa = np.zeros((3))
-    re = np.zeros((3))
-    dr = np.zeros((3))
-    
-    dmdr   = np.zeros((3))
-    dmsdr  = np.zeros((3))
-    dmdr2  = np.zeros((3))
-    dmsdr2 = np.zeros((3))
-    dQdr   = np.zeros((3))
-    dJdr   = np.zeros((3))
-    dQdr2  = np.zeros((3))
-    dJdr2  = np.zeros((3))
-    
     # FIRST DERIVATIVE
-    if (grad != 0):
-        r[0] = drab
-        r[1] = drbc
-        r[2] = drac
-        dd[0] = Drab
-        dd[1] = Drbc
-        dd[2] = Drac
-        fa[0] = Brab
-        fa[1] = Brbc
-        fa[2] = Brac
-        re[0] = lrab
-        re[1] = lrbc
-        re[2] = lrac
-        term = 1 / drac
+    if (derivative != 0):
+        
+        dr = np.zeros((3))
+        
+        dmdr   = np.zeros((3))
+        dmsdr  = np.zeros((3))
+        dmdr2  = np.zeros((3))
+        dmsdr2 = np.zeros((3))
+        dQdr   = np.zeros((3))
+        dJdr   = np.zeros((3))
+        dQdr2  = np.zeros((3))
+        dJdr2  = np.zeros((3))
+        term = 1 / Separations[2]
     
         for m in range(3):
-           dr[m] = r[m] - re[m] 
-           ex1 = np.exp( - fa[m] * dr[m])
+           dr[m] = R[m] - Reqs[m] 
+           ex1 = np.exp( - Morse_Parameters[m] * dr[m])
            ex2 = ex1 * ex1
     
-           dmdr[m]   = dd[m] * ((-2 * fa[m]         * ex2) + (2 * fa[m]         * ex1))# morse 1st deriv
-           dmsdr[m]  = dd[m] * ((   - fa[m]         * ex2) - (    fa[m]         * ex1))# anti-morse 1st deriv
-           dmdr2[m]  = dd[m] * (( 4 * fa[m] * fa[m] * ex2) - (2 * fa[m] * fa[m] * ex1))
-           dmsdr2[m] = dd[m] * (( 2 * fa[m] * fa[m] * ex2) + (    fa[m] * fa[m] * ex1))
+           dmdr[m]   = Dissociation_energies[m] * ((-2 * Morse_Parameters[m]         * ex2) + (2 * Morse_Parameters[m]         * ex1))# morse 1st deriv
+           dmsdr[m]  = Dissociation_energies[m] * ((   - Morse_Parameters[m]         * ex2) - (    Morse_Parameters[m]         * ex1))# anti-morse 1st deriv
+           dmdr2[m]  = Dissociation_energies[m] * (( 4 * Morse_Parameters[m] * Morse_Parameters[m] * ex2) - (2 * Morse_Parameters[m] * Morse_Parameters[m] * ex1))
+           dmsdr2[m] = Dissociation_energies[m] * (( 2 * Morse_Parameters[m] * Morse_Parameters[m] * ex2) + (    Morse_Parameters[m] * Morse_Parameters[m] * ex1))
      
            dQdr[m]  = 0.5 * ((dmdr[m]  + dmsdr[m] ) + k * (dmdr[m]  - dmsdr[m] )) # coulomb 1st deriv
            dJdr[m]  = 0.5 * ((dmdr[m]  - dmsdr[m] ) + k * (dmdr[m]  + dmsdr[m] )) # exchange 1st deriv
            dQdr2[m] = 0.5 * ((dmdr2[m] + dmsdr2[m]) + k * (dmdr2[m] - dmsdr2[m]))
            dJdr2[m] = 0.5 * ((dmdr2[m] - dmsdr2[m]) + k * (dmdr2[m] + dmsdr2[m]))
     
-        xdQdr1 = dQdr[2] * (r[0] - r[1] * np.cos(theta)) * term 
-        xdQdr2 = dQdr[2] * (r[1] - r[0] * np.cos(theta)) * term
-        xdQdro = dQdr[2] * (r[0] * r[1] * np.sin(theta)) * term 
+        xdQdr1 = dQdr[2] * (R[0] - R[1] * np.cos(theta)) * term 
+        xdQdr2 = dQdr[2] * (R[1] - R[0] * np.cos(theta)) * term
+        xdQdro = dQdr[2] * (R[0] * R[1] * np.sin(theta)) * term 
 
-        xdJdr1 = dJdr[2] * (r[0] - r[1] * np.cos(theta)) * term 
-        xdJdr2 = dJdr[2] * (r[1] - r[0] * np.cos(theta)) * term
-        xdJdro = dJdr[2] * (r[0] * r[1] * np.sin(theta)) * term
+        xdJdr1 = dJdr[2] * (R[0] - R[1] * np.cos(theta)) * term 
+        xdJdr2 = dJdr[2] * (R[1] - R[0] * np.cos(theta)) * term
+        xdJdro = dJdr[2] * (R[0] * R[1] * np.sin(theta)) * term
     
         xmu  = xdJdr1 - dJdr[0]
         xnew = (Jdrbc - Jdrac) * (-xdJdr1)
@@ -117,56 +117,56 @@ def lepspoint(drab,drbc,theta,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,H,gra
         tm2 = (-(Jdrab - Jdrbc) * dJdr[1] + (Jdrbc - Jdrac) * ymu + ynew) * 0.5 * (1 / (FKK ** 0.5))
         tm3 = (-(Jdrbc - Jdrac) * xdJdro  + (Jdrac - Jdrab) * xdJdro)     * 0.5 * (1 / (FKK ** 0.5))
  
-        Frab = -1 / (1 + sq) * (dQdr[0] + xdQdr1 - ist * tm1)
-        Frbc = -1 / (1 + sq) * (dQdr[1] + xdQdr2 - ist * tm2)
-        Frac = -1 / (1 + sq) * (xdQdro - ist * tm3)
+        First_derivative[0] = -1 / (1 + sq) * (dQdr[0] + xdQdr1 - ist * tm1)
+        First_derivative[1] = -1 / (1 + sq) * (dQdr[1] + xdQdr2 - ist * tm2)
+        First_derivative[2] = -1 / (1 + sq) * (xdQdro - ist * tm3)
     
     # SECOND DERIVATIVE
-        if (grad == 2):    
-              bgt1 = dQdr2[2] * ((r[0] - r[1] * np.cos(theta)) * term) ** 2
-              bgt2 = (-(r[0] - r[1] * np.cos(theta)) ** 2 *(term ** 3) + term)
+        if (derivative == 2):    
+              bgt1 = dQdr2[2] * ((R[0] - R[1] * np.cos(theta)) * term) ** 2
+              bgt2 = (-(R[0] - R[1] * np.cos(theta)) ** 2 *(term ** 3) + term)
               xdQr1r1 = bgt1 + bgt2 * dQdr[2]
-              bzt1 = dJdr2[2] * ((r[0] - r[1] * np.cos(theta)) * term) ** 2
-              bzt2 = (-(r[0] - r[1] * np.cos(theta)) ** 2 * (term ** 3) + term)
+              bzt1 = dJdr2[2] * ((R[0] - R[1] * np.cos(theta)) * term) ** 2
+              bzt2 = (-(R[0] - R[1] * np.cos(theta)) ** 2 * (term ** 3) + term)
               xdJr1r1 = bzt1 + bzt2 * dJdr[2]
     
-              yy = (r[1] - r[0] * np.cos(theta))
-              bgt1 = dQdr2[2] * (r[0] - r[1] * np.cos(theta)) * term ** 2 * yy
-              bgt2 = (-(r[0] - r[1] * np.cos(theta)) * yy * (term ** 3) - term * np.cos(theta))
+              yy = (R[1] - R[0] * np.cos(theta))
+              bgt1 = dQdr2[2] * (R[0] - R[1] * np.cos(theta)) * term ** 2 * yy
+              bgt2 = (-(R[0] - R[1] * np.cos(theta)) * yy * (term ** 3) - term * np.cos(theta))
               xdQr1r2 = bgt1 + bgt2 * dQdr[2]
-              bzt1 = dJdr2[2] * (r[0] - r[1] * np.cos(theta)) * term ** 2 * yy
-              bzt2 = (-(r[0] - r[1] * np.cos(theta)) * yy * (term ** 3) - term * np.cos(theta))
+              bzt1 = dJdr2[2] * (R[0] - R[1] * np.cos(theta)) * term ** 2 * yy
+              bzt2 = (-(R[0] - R[1] * np.cos(theta)) * yy * (term ** 3) - term * np.cos(theta))
               xdJr1r2=bzt1+bzt2*dJdr[2]
     
-              yy = (r[0] * r[1] * np.sin(theta))
-              bgt1 = dQdr2[2] * (r[0] - r[1] * np.cos(theta)) * term ** 2 * yy
-              bgt2 = (-(r[0] - r[1] * np.cos(theta)) * yy * (term ** 3) + term * yy / r[0])
+              yy = (R[0] * R[1] * np.sin(theta))
+              bgt1 = dQdr2[2] * (R[0] - R[1] * np.cos(theta)) * term ** 2 * yy
+              bgt2 = (-(R[0] - R[1] * np.cos(theta)) * yy * (term ** 3) + term * yy / R[0])
               xdQr1ro = bgt1 + bgt2 * dQdr[2]
-              bzt1 = dJdr2[2] * (r[0] - r[1] * np.cos(theta)) * term ** 2 * yy
-              bzt2 = (-(r[0] - r[1] * np.cos(theta)) * yy * (term ** 3) + term * yy / r[0])
+              bzt1 = dJdr2[2] * (R[0] - R[1] * np.cos(theta)) * term ** 2 * yy
+              bzt2 = (-(R[0] - R[1] * np.cos(theta)) * yy * (term ** 3) + term * yy / R[0])
               xdJr1ro = bzt1 + bzt2 * dJdr[2]
     
-              yy = (r[0] * r[1] * np.sin(theta))
-              bgt1 = dQdr2[2] * (r[1] - r[0] * np.cos(theta)) * term ** 2 * yy
-              bgt2 = (-(r[1] - r[0] * np.cos(theta)) * yy * (term ** 3) + term * yy / r[1])
+              yy = (R[0] * R[1] * np.sin(theta))
+              bgt1 = dQdr2[2] * (R[1] - R[0] * np.cos(theta)) * term ** 2 * yy
+              bgt2 = (-(R[1] - R[0] * np.cos(theta)) * yy * (term ** 3) + term * yy / R[1])
               xdQr2ro = bgt1 + bgt2 * dQdr[2]
-              bzt1 = dJdr2[2] * (r[1] - r[0] * np.cos(theta)) * term ** 2 * yy
-              bzt2 = (-(r[1] - r[0] * np.cos(theta)) * yy * (term ** 3) + term * yy / r[1])
+              bzt1 = dJdr2[2] * (R[1] - R[0] * np.cos(theta)) * term ** 2 * yy
+              bzt2 = (-(R[1] - R[0] * np.cos(theta)) * yy * (term ** 3) + term * yy / R[1])
               xdJr2ro = bzt1 + bzt2 * dJdr[2]
     
-              bgt1 = dQdr2[2] * ((r[1] - r[0] * np.cos(theta)) * term) ** 2
-              bgt2 = (-(r[1] - r[0] * np.cos(theta)) ** 2 * (term ** 3) + term)
+              bgt1 = dQdr2[2] * ((R[1] - R[0] * np.cos(theta)) * term) ** 2
+              bgt2 = (-(R[1] - R[0] * np.cos(theta)) ** 2 * (term ** 3) + term)
               xdQr2r2 = bgt1 + bgt2 * dQdr[2]
-              bzt1 = dJdr2[2] * ((r[1]-r[0] * np.cos(theta)) * term) ** 2
-              bzt2 = (-(r[1] - r[0] * np.cos(theta)) ** 2 * (term ** 3) + term)
+              bzt1 = dJdr2[2] * ((R[1]-R[0] * np.cos(theta)) * term) ** 2
+              bzt2 = (-(R[1] - R[0] * np.cos(theta)) ** 2 * (term ** 3) + term)
               xdJr2r2 = bzt1 + bzt2 * dJdr[2]
 
-              blt = r[0] * r[1] * np.cos(theta)
-              bgt1 = dQdr2[2] * ((r[0] * r[1] * np.sin(theta)) * term) ** 2
-              bgt2 = -(r[0] * r[1] * np.sin(theta)) ** 2 * (term ** 3) + term * blt
+              blt = R[0] * R[1] * np.cos(theta)
+              bgt1 = dQdr2[2] * ((R[0] * R[1] * np.sin(theta)) * term) ** 2
+              bgt2 = -(R[0] * R[1] * np.sin(theta)) ** 2 * (term ** 3) + term * blt
               xdQroro = bgt1 + bgt2 * dQdr[2]
-              bzt1 = dJdr2[2] * ((r[0] * r[1] * np.sin(theta)) * term) ** 2
-              bzt2 = -(r[0] * r[1] * np.sin(theta)) ** 2 * (term ** 3) + term * blt
+              bzt1 = dJdr2[2] * ((R[0] * R[1] * np.sin(theta)) * term) ** 2
+              bzt2 = -(R[0] * R[1] * np.sin(theta)) ** 2 * (term ** 3) + term * blt
               xdJroro = bzt1 + bzt2 * dJdr[2]
     
               fn1 = (Jdrab - Jdrbc) * dJdr[0] + (Jdrac - Jdrab) * (xdJdr1 - dJdr[0])
@@ -212,18 +212,11 @@ def lepspoint(drab,drbc,theta,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,H,gra
               ttm5 = (.5 * (1 / (FKK ** 0.5)) * fn2i) - (fn1i * .25 * (1 / FKK ** 1.5) * fn1i)
               ttm6 = (.5 * (1 / (FKK ** 0.5)) * fn2j) - (fn1j * .25 * (1 / FKK ** 1.5) * fn1j)
     
-              hr1r1 = (1 / (1 + sq)) * (dQdr2[0] + xdQr1r1 - ist * ttm1)
-              hr1r2 = (1 / (1 + sq)) * (           xdQr1r2 - ist * ttm2)
-              hr1r3 = (1 / (1 + sq)) * (           xdQr1ro - ist * ttm3)
-              hr2r3 = (1 / (1 + sq)) * (           xdQr2ro - ist * ttm4)
-              hr2r2 = (1 / (1 + sq)) * (dQdr2[1] + xdQr2r2 - ist * ttm5)
-              hr3r3 = (1 / (1 + sq)) * (           xdQroro - ist * ttm6)
+              Hessian[0,0] = (1 / (1 + sq)) * (dQdr2[0] + xdQr1r1 - ist * ttm1)
+              Hessian[0,1] = Hessian[1,0] = (1 / (1 + sq)) * (           xdQr1r2 - ist * ttm2)
+              Hessian[0,2] = Hessian[2,0] = (1 / (1 + sq)) * (           xdQr1ro - ist * ttm3)
+              Hessian[1,2] = Hessian[2,1] = (1 / (1 + sq)) * (           xdQr2ro - ist * ttm4)
+              Hessian[1,1] = (1 / (1 + sq)) * (dQdr2[1] + xdQr2r2 - ist * ttm5)
+              Hessian[2,2] = (1 / (1 + sq)) * (           xdQroro - ist * ttm6)
               
-              
-              return V,Frab,Frbc,Frac,hr1r1,hr1r2,hr1r3,hr2r2,hr2r3,hr3r3
-              
-        else:
-            return V,Frab,Frbc,Frac
-              
-    else:
-        return V
+    return V

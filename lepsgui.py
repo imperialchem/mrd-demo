@@ -22,25 +22,29 @@ Created on Mon May 22 16:59:17 2017
 
 """
 
-from params import params
+from params import Params
 from lepspoint import lepspoint
 from lepnorm import lepnorm
+from trajectory import get_trajectory, get_first, get_surface
 
 import numpy as np
 from numpy.linalg.linalg import LinAlgError
+import copy
 
 from configparser import ConfigParser
+
+import tkinter as tk
+import tkinter.messagebox as msgbox
+from tkinter.filedialog import asksaveasfilename
+
+from matplotlib import use as mpl_use
+mpl_use("TkAgg")
 
 import matplotlib.pyplot as plt
 import matplotlib.collections as mcoll
 from matplotlib.animation import FuncAnimation
 from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.widgets import Button
 import warnings
-
-import tkinter as tk
-import tkinter.messagebox as msgbox
-from tkinter.filedialog import asksaveasfilename
 
 from argparse import ArgumentParser
 
@@ -54,7 +58,6 @@ class Interactive():
         self.root.resizable(0,0)
         
         ###Initialise defaults###
-        
         config = ConfigParser(inline_comment_prefixes=(';', '#'))
         config.read('params.ini')
         
@@ -77,12 +80,32 @@ class Interactive():
         
         defaults = config['defaults']
         self.dt  = float(defaults['dt'])  #Time step in dynamics trajectory
-        self.H   = float(defaults['H'])   #Surface parameter
         self.lim = float(defaults['lim']) #Calculation will stop once this distance is exceeded
 
         self.Vmat = None       #Array where potential is stored for each gridpoint
         self.old_params = None #Variable used to prevent surface being recalculated
+
+        self.theta = None
+        self.steps = None
+        self.params = None
         
+        self.a = 1
+        self.b = 1
+        self.c = 1
+        self.xrabi = 0
+        self.xrbci = 0
+        self.xraci = 0
+        self.xrabi = 0
+        self.xrbci = 0
+        self.prabi = 0
+        self.prbci = 0
+        self.steps = 0
+        self.cutoff = 0
+        self.spacing = 0
+        self.calc_type = ""
+        self.theta = 0
+        self.plot_type = ""
+
         self.entries  = {} #Dictionary of entries to be read on refresh (user input)
         self.defaults = {  #Defaults for each entry
            #Key        : Default value  , type , processing function
@@ -108,6 +131,42 @@ class Interactive():
             if procfunc: #Check whether processing is needed
                 val = procfunc(val)
             setattr(self, key, val)
+
+        self.xraci = ((self.xrabi ** 2) + (self.xrbci ** 2) - 2 * self.xrabi * self.xrbci * np.cos(self.theta)) ** 0.5
+
+        #Arrays
+        self.Current_Separations = np.zeros((3))
+        self.Animation_Positions = []
+        self.Trajectory_Separations = []
+
+        self.Current_Momenta = np.zeros((3))
+        self.Trajectory_Momenta = []
+
+        self.Current_First_derivative = np.zeros((3))
+        self.Trajectory_First_derivatives = []
+
+        self.Current_Hessian = np.zeros((3,3))
+        self.Trajectory_Hessians = []
+
+        self.Current_Accelerations = np.zeros((3))
+        self.Trajectory_Accelerations = []
+
+        self.current_time = 0
+        self.Trajectory_times = []
+
+        self.Current_Velocities = np.zeros((3))
+        self.Trajectory_Velocities = []
+
+        self.current_potential_energy = 0
+        self.Potential_Energies = []
+
+        self.current_kinetic_energy = 0
+        self.Kinetic_Energies = []
+
+        self.current_total_energy = 0
+        self.Total_Energies = []
+
+        self.get_arrays()
         
         #This is needed to allow surface to be calculated on the first run
         self._firstrun = True
@@ -181,10 +240,10 @@ class Interactive():
         
         if advanced:
             plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
-                "Internuclear Momenta vs Time", "Energy vs Time", "p(AB) vs p(BC)", "v(AB) vs v(BC)", "Animation", "Interactive"]     
+                "Internuclear Current_Momenta vs Time", "Energy vs Time", "p(AB) vs p(BC)", "v(AB) vs v(BC)", "Animation"]     
         else:
             plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
-                "Internuclear Momenta vs Time", "Energy vs Time", "Animation", "Interactive"]     
+                "Internuclear Current_Momenta vs Time", "Energy vs Time", "Animation"]     
         
         self._add_optionmenu(type_frame, "plot_type", plot_types , {}, gk('00'), {"width":20})
         
@@ -242,7 +301,6 @@ class Interactive():
         self._add_button(geometry_frame, {"text": "Plot"}, gk('400055'), {"<Button-1>": self.plot_eigen})
         
         ###First Run###
-        
         
         # Initialise params and info
         self.get_params()
@@ -317,7 +375,7 @@ class Interactive():
         button.grid(**grid_kwargs)
         for k, v in bind_kwargs.items():
             button.bind(k, v)
-        button.config(bg = "blue", **config_kwargs)
+        button.config(**config_kwargs)
         
     def _add_entry(self, frame, key, entry_kwargs={}, grid_kwargs={}, config_kwargs={}, attach_func=None):
         """Add a text entry"""
@@ -362,313 +420,87 @@ class Interactive():
         """This gets parameters for a given set of atoms"""
         #Params
         try:
-            ma,mb,mc,Drab,Drbc,Drac,lrab,lrbc,lrac,Brab,Brbc,Brac,mina,maxa,minb,maxb = params(self.a,self.b,self.c)
+            self.params = Params(self.a,self.b,self.c)
         except Exception:
             msgbox.showerror("Error", "Parameters for this atom combination not available!")
             raise
-        
-        #Masses
-        self.ma   = ma
-        self.mb   = mb
-        self.mc   = mc
-        
-        #LEPS Parameters
-        self.Drab = Drab
-        self.Drbc = Drbc
-        self.Drac = Drac
-        self.lrab = lrab
-        self.lrbc = lrbc
-        self.lrac = lrac
-        self.Brab = Brab
-        self.Brbc = Brbc
-        self.Brac = Brac
-        
-        #Plot parameters
-        self.mina = mina
-        self.maxa = maxa
-        self.minb = minb
-        self.maxb = maxb
-        
-        # Reduced masses.
-        self.mab = (ma * mb) / (ma + mb)
-        self.mbc = (mb * mc) / (mb + mc)
-        self.mac = (ma * mc) / (ma + mc)
             
     def get_surface(self):
         """Get Vmat (potential) for a given set of parameters"""
-        self.get_params()
-        
-        #Check if params have changed. If not, no need to recalculate
-        new_params = [self.a, self.b, self.c, self.theta]
-        if self.old_params == new_params and not self._firstrun:
-            return
+        get_surface(self)
 
-        resl = 0.02 #Resolution
-        grad = 0    #Gradient calc type (0 = energy)
-        self._firstrun = False
-        
-        #Get grid
-        self.x = np.arange(self.mina,self.maxa,resl)
-        self.y = np.arange(self.minb,self.maxb,resl)
-        self.Vmat = np.zeros((len(self.y), len(self.x)))
-        
-        #Calculate potential for each gridpoint
-        for drabcount, drab in enumerate(self.x):
-            for drbccount, drbc in enumerate(self.y):
-    
-                V = lepspoint(
-                    drab,
-                    drbc,
-                    np.deg2rad(self.theta),
-                    self.Drab,
-                    self.Drbc,
-                    self.Drac,
-                    self.Brab,
-                    self.Brbc,
-                    self.Brac,
-                    self.lrab,
-                    self.lrbc,
-                    self.lrac,
-                    self.H,
-                    grad
-                )
-                self.Vmat[drbccount, drabcount] = V
+    def append_animation_position(self):
 
-        self.old_params = new_params
+        theta_rad = np.deg2rad(self.theta) #Collision Angle
+
+        #Positions of A, B and C relative to B
+        X = np.array([
+            [- self.Current_Separations[0], 0.],
+            [0., 0.],
+            [- np.cos(theta_rad) * self.Current_Separations[1], np.sin(theta_rad) * self.Current_Separations[1]]
+        ])
+        
+        #Get centre of mass
+        com = (X.T * self.params.Masses).T / self.params.total_mass
+        
+        #Translate to centre of mass (for animation)
+        X -= com
+
+        self.Animation_Positions.append(X)
+
+    def get_arrays(self):
+
+        self.xraci = ((self.xrabi ** 2) + (self.xrbci ** 2) - 2 * self.xrabi * self.xrbci * np.cos(self.theta)) ** 0.5
+        self.Current_Separations[0] = self.xrabi
+        self.Current_Separations[1] = self.xrbci
+        self.Current_Separations[2] = self.xraci
+
+        self.Current_Momenta[0] = self.prabi
+        self.Current_Momenta[1] = self.prbci
+
+        self.Current_Velocities[0] = self.prabi
+        self.Current_Velocities[1] = self.prbci
+
+        self.current_kinetic_energy = 0
+
+    def add_trajectory_step(self):
+        self.Trajectory_times.append(self.current_time)
+        self.Trajectory_Separations.append(copy.deepcopy(self.Current_Separations))
+        self.Trajectory_Velocities.append(copy.deepcopy(self.Current_Velocities))
+        self.Trajectory_Momenta.append(copy.deepcopy(self.Current_Momenta))
+        self.Trajectory_Accelerations.append(copy.deepcopy(self.Current_Accelerations))
+        self.Trajectory_First_derivatives.append(copy.deepcopy(self.Current_First_derivative))
+        self.Trajectory_Hessians.append(copy.deepcopy(self.Current_Hessian))
+
+        self.Kinetic_Energies.append(self.current_kinetic_energy)
+        self.Potential_Energies.append(self.current_potential_energy)
+
+        self.current_total_energy = self.current_kinetic_energy + self.current_potential_energy
+        self.Total_Energies.append(self.current_total_energy)
                         
     def get_trajectory(self):
         """Get dynamics, MEP or optimisation"""
         
-        itlimit = self.steps #Max number of steps
-        dt      = self.dt    #Time step
-        ti      = 0          #Initial time variable
-        tf      = 0          #Final time variable
-        
-        ma   = self.ma       #Mass of A
-        mb   = self.mb       #Mass of B
-        mc   = self.mc       #Mass of C
-        
-        mab  = self.mab      #Reduced mass of AB
-        mbc  = self.mbc      #Reduced mass of BC
-        
-        Drab = self.Drab
-        Drbc = self.Drbc
-        Drac = self.Drac
-        
-        lrab = self.lrab
-        lrbc = self.lrbc
-        lrac = self.lrac
-        
-        Brab = self.Brab
-        Brbc = self.Brbc
-        Brac = self.Brac
-        
-        thetai = np.deg2rad(self.theta) #Collision Angle
-        grad = 2 #Calculating gradients and Hessian
-        
-        xrabi = self.xrabi   #Initial AB separation
-        xrbci = self.xrbci   #Initial BC separation
-        xraci = ((xrabi ** 2) + (xrbci ** 2) - 2 * xrabi * xrbci * np.cos(thetai)) ** 0.5 #Initial AC separation
-        prabi = self.prabi   #Initial AB momentum
-        prbci = self.prbci   #Initial BC momentum
-        
-        vrabi = prabi / mab  #Initial AB Velocity
-        vrbci = prbci / mbc  #Initial BC Velocity
-        
-        #Positions of A, B and C relative to B
-        a = np.array([- xrabi, 0.])
-        b = np.array([0., 0.])
-        c = np.array([- np.cos(thetai) * xrbci, np.sin(thetai) * xrbci])
-        
-        #Get centre of mass
-        com = (a * ma + b * mb + c * mc) / (ma + mb + mc)
-        com = np.real(com)
-        
-        #Translate to centre of mass (for animation)
-        a -= com
-        b -= com
-        c -= com
-        
-        self.ra    = [a]
-        self.rb    = [b]
-        self.rc    = [c]
-        
-        #Initial AC Velocity
-        va = (a - self.ra[-1]) / dt
-        vc = (c - self.rc[-1]) / dt
-        vraci = np.linalg.norm(va + vc)
-        
-        #Initialise outputs
-        self.xrab  = [xrabi]
-        self.xrbc  = [xrbci]
-        self.xrac  = [xraci]
-        self.vrab  = [vrabi]
-        self.vrbc  = [vrbci]
-        self.vrac  = [vraci]
-        self.t     = [ti]
-    
-        self.Vrint = Vrint = []
-        self.Ktot  = Ktot  = []
-
-        self.Frab  = Frab  = []
-        self.Frbc  = Frbc  = []
-        self.Frac  = Frac  = []
-        self.arab  = arab  = []
-        self.arbc  = arbc  = []
-        self.arac  = arac  = []
-        self.etot  = etot  = []
-    
-        self.hr1r1 = hr1r1 = []
-        self.hr1r2 = hr1r2 = []
-        self.hr1r3 = hr1r3 = []
-        self.hr2r2 = hr2r2 = []
-        self.hr2r3 = hr2r3 = []
-        self.hr3r3 = hr3r3 = []
-        
-        #Flag to stop appending to output in case of a crash
-        terminate = False        
-
-        for itcounter in range(itlimit):
-            if self.calc_type != "Dynamics":
-                vrabi = 0
-                vrbci = 0
-                vraci = 0
-            
-            #Get current potential, forces, and Hessian
-            Vrinti,Frabi,Frbci,Fraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i = lepspoint(xrabi,xrbci,thetai,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,self.H,grad)
-            Vrint.append(Vrinti)
-            Frab.append(Frabi)
-            Frbc.append(Frbci)
-            Frac.append(Fraci)
-            hr1r1.append(hr1r1i)
-            hr1r2.append(hr1r2i)
-            hr1r3.append(hr1r3i)
-            hr2r2.append(hr2r2i)
-            hr2r3.append(hr2r3i)
-            hr3r3.append(hr3r3i)
-            
-            if self.calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
-                
-                #Diagonalise Hessian
-                hessian = np.array([[hr1r1i, hr1r2i, hr1r3i], [hr1r2i, hr2r2i, hr2r3i], [hr1r3i, hr2r3i, hr3r3i]])
-                eigenvalues, eigenvectors = np.linalg.eig(hessian)
-                
-                #Get forces for opt calculation
-                forces = np.array([Frabi, Frbci, Fraci])
-                
-                #Eigenvalue test
-                neg_eig_i = [i for i,eig in enumerate(eigenvalues) if eig < -0.01]
-                if len(neg_eig_i) == 0 and self.calc_type == "Opt TS":
-                    msgbox.showinfo("Eigenvalues Info", "No negative eigenvalues at this geometry")
-                    terminate = True
-                elif len(neg_eig_i) == 1 and self.calc_type == "Opt Min":
-                    msgbox.showerror("Eigenvalues Error", "Too many negative eigenvalues at this geometry")
-                    terminate = True                    
-                elif len(neg_eig_i) > 1:
-                    msgbox.showerror("Eigenvalues Error", "Too many negative eigenvalues at this geometry")
-                    terminate = True
-                
-                #Optimiser
-                disps = np.array([0.,0.,0.])
-                for mode in range(len(eigenvalues)):
-                    e_val = eigenvalues[mode]
-                    e_vec = eigenvectors[mode]
-
-                    disp = np.dot(np.dot((e_vec.T), forces), e_vec) / e_val
-                    disps += disp
-                    
-                xrabf = xrabi + disps[0]
-                xrbcf = xrbci + disps[1]
-                xracf = ((xrabf ** 2) + (xrbcf ** 2) - 2 * xrabf * xrbcf * np.cos(thetai)) ** 0.5
-
-                arabi  = 0
-                arbci  = 0
-                araci  = 0
-                thetaf = thetai
-                vrabf  = 0
-                vrbcf  = 0
-                vracf  = 0
-                Ktoti  = 0
-                tf    += dt
-                
-            else: #Dynamics/MEP
-                try:
-                    xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,Frabi,Frbci,Fraci,vrabi,vrbci,vraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i,ma,mb,mc,ti,dt,self.calc_type == "MEP")
-                except LinAlgError:
-                    msgbox.showerror("Surface Error", "Energy could not be evaulated at step {}. Steps truncated".format(itcounter + 1))
-                    terminate = True
-                
-            if xrabf > self.lim or xrbcf > self.lim: #Stop calc if distance lim is exceeded
-                msgbox.showerror("Surface Error", "Surface Limits exceeded at step {}. Steps truncated".format(itcounter + 1))
-                terminate = True
-                    
-            arab.append(arabi)
-            arbc.append(arbci)
-            arac.append(araci)
-            Ktot.append(Ktoti)
-            
-            #Total energy
-            etot.append(Vrint[itcounter] + Ktot[itcounter])
-            
-            if itcounter != itlimit - 1 and not terminate:
-                
-                #As above
-                a = np.array([- xrabf, 0.])
-                b = np.array([0., 0.])
-                c = np.array([- np.cos(thetaf) * xrbcf, np.sin(thetaf) * xrbcf])
-                com = (a * ma + b * mb + c * mc) / (ma + mb + mc)
-
-                com = np.real(com)
-                
-                a -= com
-                b -= com
-                c -= com
-                
-                #Get A-C Velocity
-                r0 = np.linalg.norm(self.rc[-1] - self.ra[-1])
-                r1 = np.linalg.norm(c - a)
-                vrac = (r1 - r0) / dt
-                
-                self.ra.append(a)                       #A  Pos
-                self.rb.append(b)                       #B  Pos
-                self.rc.append(c)                       #C  Pos
-                self.xrab.append(xrabf)                 #A-B Distance
-                self.xrbc.append(xrbcf)                 #B-C Distance
-                self.xrac.append(xracf)                 #A-C Distance
-                self.vrab.append(vrabf)                 #A-B Velocity
-                self.vrbc.append(vrbcf)                 #B-C Velocity
-                self.vrac.append(vrac)                  #A-C Velocity
-                self.t.append(tf)                       #Time
-                
-
-            xrabi = xrabf
-            xrbci = xrbcf
-            xraci = xracf
-            vrabi = vrabf
-            vrbci = vrbcf
-            vraci = vracf
-            ti = tf
-            
-            if terminate:
-                break
+        get_trajectory(self)
         
     def get_last_geo(self, *args):
         """Copy last geometry and momenta"""
         self.entries["xrabi"][0].delete(0, tk.END)
-        self.entries["xrabi"][0].insert(0, self.xrab[-1])
+        self.entries["xrabi"][0].insert(0, self.Trajectory_Separations[-1][0])
         
         self.entries["xrbci"][0].delete(0, tk.END)
-        self.entries["xrbci"][0].insert(0, self.xrbc[-1])
+        self.entries["xrbci"][0].insert(0, self.Trajectory_Separations[-1][1])
         
         self.entries["prabi"][0].delete(0, tk.END)
-        self.entries["prabi"][0].insert(0, self.vrab[-1] * self.mab)
+        self.entries["prabi"][0].insert(0, self.Trajectory_Momenta[-1][0])
         
         self.entries["prbci"][0].delete(0, tk.END)
-        self.entries["prbci"][0].insert(0, self.vrbc[-1] * self.mbc)
+        self.entries["prbci"][0].insert(0, self.Trajectory_Momenta[-1][1])
             
     def export(self, *args):
         """Run calculation and print output in CSV format"""
         self._read_entries()
+        self.get_arrays()
         self.get_trajectory()
         
         filename = asksaveasfilename(defaultextension=".csv")
@@ -676,33 +508,33 @@ class Interactive():
             return
             
         sources = [
-            ["Time",            self.t                           ],
-            ["AB Distance",     self.xrab                        ],
-            ["BC Distance",     self.xrbc                        ],
-            ["AC Distance",     self.xrac                        ],
-            ["AB Velocity",     self.vrab                        ],
-            ["BC Velocity",     self.vrbc                        ],
-            ["AC Velocity",     self.vrac                        ],
-            ["AB Momentum",     [v * self.mab for v in self.vrab]],
-            ["BC Momentum",     [v * self.mab for v in self.vrab]],
-            ["AC Momentum",     [v * self.mab for v in self.vrab]],
-            ["AB Force",        self.Frab                        ],
-            ["BC Force",        self.Frbc                        ],
-            ["AC Force",        self.Frac                        ],
-            ["Total Potential", self.Vrint                       ],
-            ["Total Kinetic",   self.Ktot                        ],
-            ["Total Energy",    self.etot                        ],
-            ["AB AB Hess Comp", self.hr1r1                       ],
-            ["AB BC Hess Comp", self.hr1r2                       ],
-            ["AB AC Hess Comp", self.hr1r3                       ],
-            ["BC BC Hess Comp", self.hr2r2                       ],
-            ["BC AC Hess Comp", self.hr2r3                       ],
-            ["AC AC Hess Comp", self.hr3r3                       ]
+            ["Time",            self.current_time                ],
+            ["AB Distance",     self.Current_Separations[0]      ],
+            ["BC Distance",     self.Current_Separations[1]      ],
+            ["AC Distance",     self.Current_Separations[2]      ],
+            ["AB Velocity",     self.Current_Velocities[0]       ],
+            ["BC Velocity",     self.Current_Velocities[1]       ],
+            ["AC Velocity",     self.Current_Velocities[2]       ],
+            ["AB Momentum",     self.Current_Momenta[0]          ],
+            ["BC Momentum",     self.Current_Momenta[1]          ],
+            ["AC Momentum",     self.Current_Momenta[2]          ],
+            ["AB dE/dx",        self.Current_First_derivative[0] ],
+            ["BC dE/dx",        self.Current_First_derivative[1] ],
+            ["AC dE/dx",        self.Current_First_derivative[2] ],
+            ["Total Potential", self.current_potential_energy    ],
+            ["Total Kinetic",   self.current_kinetic_energy      ],
+            ["Total Energy",    self.current_total_energy        ],
+            ["AB AB Hess Comp", self.Current_Hessian[0][0]       ],
+            ["AB BC Hess Comp", self.Current_Hessian[0][1]       ],
+            ["AB AC Hess Comp", self.Current_Hessian[0][2]       ],
+            ["BC BC Hess Comp", self.Current_Hessian[1][1]       ],
+            ["BC AC Hess Comp", self.Current_Hessian[1][2]       ],
+            ["AC AC Hess Comp", self.Current_Hessian[2][2]       ]
         ]
         
         out = ",".join([t for t, s in sources]) + "\n"
         
-        for step in range(len(self.t)):
+        for step in range(len(self.Trajectory_times)):
             data = []
             for t, s in sources:
                 try:
@@ -732,7 +564,7 @@ class Interactive():
             self.plot_init_pos()
         elif self.plot_type == "Internuclear Distances vs Time":
             self.plot_ind_vs_t()
-        elif self.plot_type == "Internuclear Momenta vs Time":
+        elif self.plot_type == "Internuclear Current_Momenta vs Time":
             self.plot_inm_vs_t()
         elif self.plot_type == "Energy vs Time":
             self.plot_e_vs_t()
@@ -742,8 +574,6 @@ class Interactive():
             self.plot_velocities()
         elif self.plot_type == "Animation":
             self.animation()
-        elif self.plot_type == "Interactive":
-            self.plot_interactive()
             
     def plot_contour(self):    
         """Contour Plot"""
@@ -755,14 +585,14 @@ class Interactive():
         plt.xlabel("AB Distance")
         plt.ylabel("BC Distance")
         
-        X, Y = np.meshgrid(self.x, self.y)
+        X, Y = np.meshgrid(self.Grid_X, self.Grid_Y)
         
         levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
         plt.contour(X, Y, self.Vmat, levels = levels)
-        plt.xlim([min(self.x),max(self.x)])
-        plt.ylim([min(self.y),max(self.y)])
+        plt.xlim([min(self.Grid_X),max(self.Grid_X)])
+        plt.ylim([min(self.Grid_Y),max(self.Grid_Y)])
         
-        lc = colorline(self.xrab, self.xrbc, cmap = plt.get_cmap("jet"), linewidth=1)
+        lc = colorline([x[0] for x in self.Trajectory_Separations], [x[1] for x in self.Trajectory_Separations], cmap = plt.get_cmap("jet"), linewidth=1)
         
         ax.add_collection(lc)
         plt.draw()
@@ -792,14 +622,14 @@ class Interactive():
         plt.xlabel("Q1")
         plt.ylabel("Q2")
         
-        X, Y = np.meshgrid(self.x, self.y)
+        X, Y = np.meshgrid(self.Grid_X, self.Grid_Y)
         
-        ma = self.ma
-        mb = self.mb
-        mc = self.mc
+        ma = self.params.mass_a
+        mb = self.params.mass_b
+        mc = self.params.mass_c
         
-        a    = ((ma * (mb + mc)) / (ma + mb + mc)) ** 0.5
-        b    = ((mc * (ma + mb)) / (ma + mb + mc)) ** 0.5
+        a    = ((ma * (mb + mc)) / (self.params.total_mass)) ** 0.5
+        b    = ((mc * (ma + mb)) / (self.params.total_mass)) ** 0.5
         beta = np.arccos(((ma * mc) / ((mb + mc) * (ma + mb))) ** 0.5)
 
         #Transform grid
@@ -807,8 +637,8 @@ class Interactive():
         Q2 = b * Y * np.sin(beta)
         
         #Plot gridlines every 0.5A
-        grid_x = [self.x[0]] + list(np.arange(np.ceil(min(self.x) * 2) / 2, np.floor(max(self.x) * 2) / 2 + 0.5, 0.5)) + [self.x[-1]]
-        grid_y = [self.y[0]] + list(np.arange(np.ceil(min(self.y) * 2) / 2, np.floor(max(self.y) * 2) / 2 + 0.5, 0.5)) + [self.y[-1]]
+        grid_x = [self.Grid_X[0]] + list(np.arange(np.ceil(min(self.Grid_X) * 2) / 2, np.floor(max(self.Grid_X) * 2) / 2 + 0.5, 0.5)) + [self.Grid_X[-1]]
+        grid_y = [self.Grid_Y[0]] + list(np.arange(np.ceil(min(self.Grid_Y) * 2) / 2, np.floor(max(self.Grid_Y) * 2) / 2 + 0.5, 0.5)) + [self.Grid_Y[-1]]
         
         for x in grid_x:
             r1 = [x, grid_y[ 0]]
@@ -837,11 +667,9 @@ class Interactive():
         plt.axes().set_aspect('equal')
         
         #Plot transformed trajectory
-        xrab = np.array(self.xrab)
-        yrab = np.array(self.xrbc)
         
-        srab = a * xrab + b * yrab * np.cos(beta)
-        srbc = b * yrab * np.sin(beta)
+        srab = a * np.array([x[0] for x in self.Trajectory_Separations]) + b * np.array([x[1] for x in self.Trajectory_Separations]) * np.cos(beta)
+        srbc = b * np.array([x[1] for x in self.Trajectory_Separations]) * np.sin(beta)
         
         lc = colorline(srab, srbc, cmap = plt.get_cmap("jet"), linewidth=2)
         
@@ -862,15 +690,15 @@ class Interactive():
         plt.xlabel("AB Distance")
         plt.ylabel("BC Distance")
         
-        X, Y = np.meshgrid(self.x, self.y)
-        ax.set_xlim3d([min(self.x),max(self.x)])
-        ax.set_ylim3d([min(self.y),max(self.y)])
+        X, Y = np.meshgrid(self.Grid_X, self.Grid_Y)
+        ax.set_xlim3d([min(self.Grid_X),max(self.Grid_X)])
+        ax.set_ylim3d([min(self.Grid_Y),max(self.Grid_Y)])
         
         Z = np.clip(self.Vmat, -10000, self.cutoff)
         
         ax.plot_surface(X, Y, Z, rstride=self.spacing, cstride=self.spacing, cmap='jet', alpha=0.3, linewidth=0)
         ax.contour(X, Y, Z, zdir='z', cmap='jet', stride=self.spacing, offset=np.min(Z) - 10)
-        ax.plot(self.xrab, self.xrbc, self.Vrint)
+        ax.plot([x[0] for x in self.Trajectory_Separations], [x[1] for x in self.Trajectory_Separations], self.Potential_Energies)
          
         plt.draw()
         plt.pause(0.0001)
@@ -885,9 +713,9 @@ class Interactive():
         plt.xlabel("Time")
         plt.ylabel("Distance")
         
-        ab, = plt.plot(self.t, self.xrab, label = "A-B")
-        bc, = plt.plot(self.t, self.xrbc, label = "B-C")
-        ac, = plt.plot(self.t, self.xrac, label = "A-C")
+        ab, = plt.plot(self.Trajectory_times, [x[0] for x in self.Trajectory_Separations], label = "A-B")
+        bc, = plt.plot(self.Trajectory_times, [x[1] for x in self.Trajectory_Separations], label = "B-C")
+        ac, = plt.plot(self.Trajectory_times, [x[2] for x in self.Trajectory_Separations], label = "A-C")
         
         plt.legend(handles=[ab, bc, ac])
         
@@ -895,7 +723,7 @@ class Interactive():
         plt.pause(0.0001)
         
     def plot_inm_vs_t(self):
-        """Internuclear Momenta VS Time"""
+        """Internuclear Current_Momenta VS Time"""
         plt.clf()
         ax = plt.gca()
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
@@ -903,14 +731,10 @@ class Interactive():
         
         plt.xlabel("Time")
         plt.ylabel("Momentum")
-        
-        momab = [v * self.mab for v in self.vrab]
-        mombc = [v * self.mbc for v in self.vrbc]
-        momac = [v * self.mac for v in self.vrac]
 
-        ab, = plt.plot(self.t, momab, label = "A-B")
-        bc, = plt.plot(self.t, mombc, label = "B-C")
-        ac, = plt.plot(self.t, momac, label = "A-C")
+        ab, = plt.plot(self.Trajectory_times, [x[0] for x in self.Trajectory_Momenta], label = "A-B")
+        bc, = plt.plot(self.Trajectory_times, [x[1] for x in self.Trajectory_Momenta], label = "B-C")
+        ac, = plt.plot(self.Trajectory_times, [x[2] for x in self.Trajectory_Momenta], label = "A-C")
         
         plt.legend(handles=[ab, bc, ac])
         
@@ -924,11 +748,8 @@ class Interactive():
         
         plt.xlabel("AB Momentum")
         plt.ylabel("BC Momentum")
-        
-        momab = [v * self.mab for v in self.vrab]
-        mombc = [v * self.mbc for v in self.vrbc]
 
-        lc = colorline(momab, mombc, cmap = plt.get_cmap("jet"), linewidth=1)
+        lc = colorline([x[0] for x in self.Trajectory_Momenta], [x[1] for x in self.Trajectory_Momenta], cmap = plt.get_cmap("jet"), linewidth=1)
         
         ax.add_collection(lc)
         ax.autoscale()
@@ -943,7 +764,7 @@ class Interactive():
         plt.xlabel("AB Velocity")
         plt.ylabel("BC Velocity")
         
-        lc = colorline(self.vrab, self.vrbc, cmap = plt.get_cmap("jet"), linewidth=1)
+        lc = colorline([x[0] for x in self.Trajectory_Velocities], [x[1] for x in self.Trajectory_Velocities], cmap = plt.get_cmap("jet"), linewidth=1)
         
         ax.add_collection(lc)
         ax.autoscale()
@@ -960,8 +781,8 @@ class Interactive():
         plt.xlabel("Time")
         plt.ylabel("Energy")
 
-        pot, = plt.plot(self.t, self.Vrint, label = "Potential Energy")
-        kin, = plt.plot(self.t, self.Ktot,  label = "Kinetic Energy")
+        pot, = plt.plot(self.Trajectory_times, self.Potential_Energies, label = "Potential Energy")
+        kin, = plt.plot(self.Trajectory_times, self.Kinetic_Energies,  label = "Kinetic Energy")
         
         plt.legend(handles=[pot, kin])
         
@@ -982,225 +803,38 @@ class Interactive():
             
         def update(i):
             ap, bp, cp = patches
-            ap.center = self.ra[i]
-            bp.center = self.rb[i]
-            cp.center = self.rc[i]
+            ap.center = self.Animation_Positions[i][0]
+            bp.center = self.Animation_Positions[i][1]
+            cp.center = self.Animation_Positions[i][2]
             return ap, bp, cp,
             
         ax = plt.axes(
-        xlim = (min(self.ra, key=lambda x: x[0])[0] - 1, max(self.rc, key=lambda x: x[0])[0] + 1),
-        ylim = (min(self.ra, key=lambda x: x[1])[1] - 1, max(self.rc, key=lambda x: x[1])[1] + 1)
+            xlim = (
+                min([x[0] for x in self.Animation_Positions], key=lambda x: x[0])[0] - 1, 
+                max([x[2] for x in self.Animation_Positions], key=lambda x: x[0])[0] + 1
+            ),
+            ylim = (
+                min([x[0] for x in self.Animation_Positions], key=lambda x: x[1])[1] - 1, 
+                max([x[2] for x in self.Animation_Positions], key=lambda x: x[1])[1] + 1
+            )
         )
         ax.set_aspect('equal')
             
-        patches = []
+        patches = [None, None, None]
         
-        for at_name in ["a", "b", "c"]:
+        for i, at_name in enumerate(["a", "b", "c"]):
             at = self.entries[at_name][0].get()
             index, vdw, c = self.atom_map[at]
-            pos = getattr(self, "r" + at_name)[0]
+            pos = self.Animation_Positions[0][i]
             patch = plt.Circle(pos, vdw * 0.25, fc = c)
-            patches.append(patch)
+            patches[i] = patch
         
-        self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(self.ra), repeat=True, interval=20)
+        self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(self.Trajectory_Separations), repeat=True, interval=20)
         
         try:
             plt.show()
         except:
             pass
-        
-    def plot_interactive(self):
-        plt.close('all')
-        
-        self.all_fig = plt.figure('Interactive', figsize=(10,15))
-        
-        #If window is closed, stop running
-        self.all_fig.canvas.mpl_connect('close_event', self.stop)
-        
-        t0 = self.t[0]
-        
-        #Areas to fill with plots and widgets
-        rects = {
-        "contour" : [0.05, 0.70, 0.40, 0.25],
-        "evt"     : [0.55, 0.70, 0.40, 0.25],
-        "dvt"     : [0.05, 0.35, 0.40, 0.25],
-        "mvt"     : [0.55, 0.35, 0.40, 0.25],
-        "ani"     : [0.05, 0.10, 0.90, 0.20],
-        "pause"   : [0.05, 0.05, 0.15, 0.03],
-        "stop"    : [0.20, 0.05, 0.15, 0.03]
-        }
-        
-        #Get axes
-        axes = {}
-        for key, rect in rects.items():
-            ax = self.all_fig.add_axes(rect)
-
-            ax.get_xaxis().get_major_formatter().set_useOffset(False)
-            ax.get_yaxis().get_major_formatter().set_useOffset(False)                        
-            
-            axes[key] = ax
-        
-        #Contour        
-        ax = axes["contour"]
-        plt.sca(ax)
-        
-        plt.xlabel("AB Distance")
-        plt.ylabel("BC Distance")
-        
-        X, Y = np.meshgrid(self.x, self.y)
-        
-        levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
-        plt.contour(X, Y, self.Vmat, levels = levels)
-        plt.xlim([min(self.x),max(self.x)])
-        plt.ylim([min(self.y),max(self.y)])
-        
-        lc = colorline(self.xrab, self.xrbc, cmap = plt.get_cmap("jet"), linewidth=1)
-        
-        pos, = plt.plot([self.xrabi], [self.xrbci], marker='o', markersize=6, color="red")
-        
-        ax.add_collection(lc)
-        
-        
-        #Energy vs Time
-        ax = axes["evt"]
-        plt.sca(ax)
-        
-        plt.xlabel("Time")
-        plt.ylabel("Energy")
-
-        pot, = plt.plot(self.t, self.Vrint, label = "Potential Energy")
-        kin, = plt.plot(self.t, self.Ktot,  label = "Kinetic Energy")
-        
-        evt_bar, = plt.plot([t0, t0], ax.get_ylim())
-        
-        plt.legend(handles=[pot, kin])        
-        
-        
-        #Internuclear Distances vs Time
-        ax = axes["dvt"]
-        plt.sca(ax)
-        
-        plt.xlabel("Time")
-        plt.ylabel("Distance")
-        
-        ab, = plt.plot(self.t, self.xrab, label = "A-B")
-        bc, = plt.plot(self.t, self.xrbc, label = "B-C")
-        ac, = plt.plot(self.t, self.xrac, label = "A-C")
-        
-        dvt_bar, = plt.plot([t0, t0], ax.get_ylim())
-        
-        plt.legend(handles=[ab, bc, ac])
-        
-        
-        #Internuclear Momenta vs Time
-        ax = axes["mvt"]
-        plt.sca(ax)
-        
-        plt.xlabel("Time")
-        plt.ylabel("Momentum")
-        
-        momab = [v * self.mab for v in self.vrab]
-        mombc = [v * self.mbc for v in self.vrbc]
-        momac = [v * self.mac for v in self.vrac]
-
-        ab, = plt.plot(self.t, momab, label = "A-B")
-        bc, = plt.plot(self.t, mombc, label = "B-C")
-        ac, = plt.plot(self.t, momac, label = "A-C")
-        
-        mvt_bar, = plt.plot([t0, t0], ax.get_ylim())
-        
-        plt.legend(handles=[ab, bc, ac])
-        
-        
-        #Animation
-        ax = axes["ani"]
-        plt.sca(ax)
-        ax.set_xlim(min(self.ra, key=lambda x: x[0])[0] - 1, max(self.rc, key=lambda x: x[0])[0] + 1)
-        ax.set_ylim(min(self.ra, key=lambda x: x[1])[1] - 1, max(self.rc, key=lambda x: x[1])[1] + 1)
-        ax.set_aspect('equal')
-            
-        patches = []
-        
-        for at_name in ["a", "b", "c"]:
-            at = self.entries[at_name][0].get()
-            index, vdw, c = self.atom_map[at]
-            circle_pos = getattr(self, "r" + at_name)[0]
-            patch = plt.Circle(circle_pos, vdw * 0.25, fc = c)
-            patches.append(patch)
-        
-        ap, bp, cp = patches
-        ax.add_patch(ap)
-        ax.add_patch(bp)
-        ax.add_patch(cp)
-             
-        
-        #Widgets
-        ax = axes["pause"]
-        plt.sca(ax)
-        
-        self.paused = False
-        self.pause_button = Button(ax, "Pause")
-        self.pause_button.on_clicked(self.toggle_pause)
-
-        ax = axes["stop"]
-        plt.sca(ax)
-        
-        self.stopped = False
-        self.stop_button = Button(ax, "Stop")
-        self.stop_button.on_clicked(self.stop)
-        
-        while not self.stopped:
-            i = 0
-            while i < len(self.t):
-                
-                #Pause and listen for changes
-                while self.paused and not self.stopped:
-                    plt.pause(0.1)
-                    
-                #Code will break out of while loops if stop button pressed or fig closed
-                if self.stopped:
-                    break
-                    
-                t = self.t[i]
-                min_x, max_x = axes["contour"].get_xlim()
-                min_y, max_y = axes["contour"].get_ylim()
-                
-                x = min(max(min_x, self.xrab[i]), max_x)
-                y = min(max(min_y, self.xrbc[i]), max_y)
-                
-                pos.set_data([x, y])            
-                
-                evt_bar.set_xdata([t, t])
-                dvt_bar.set_xdata([t, t])
-                mvt_bar.set_xdata([t, t])
-                
-                ap.center = self.ra[i]
-                bp.center = self.rb[i]
-                cp.center = self.rc[i]  
-                
-                #Limit refresh to 50 FPS
-                plt.pause(0.02)
-                
-                i += 2
-                
-        plt.close('all')
-        
-    def toggle_pause(self, *args):
-        if hasattr(self, "paused"):
-            if self.paused:
-                self.pause_button.label.set_text("Pause")
-                self.paused = False
-            else:
-                self.pause_button.label.set_text("Play")
-                self.paused = True
-        else:
-            self.paused = True
-            
-    def stop(self, *args):
-        if hasattr(self, "stopped"):
-            self.stopped = not self.stopped
-        else:
-            self.stopped = True
         
     def plot_init_pos(self, *args):
         """Cross representing initial geometry"""
@@ -1243,63 +877,23 @@ class Interactive():
         
     def get_first(self):
         """1 step of trajectory to get geometry properties"""
-        self._read_entries()
-        self.get_params()
-        dt   = self.dt
-        
-        ma   = self.ma
-        mb   = self.mb
-        mc   = self.mc
-        
-        mab  = self.mab
-        mbc  = self.mbc
-        
-        Drab = self.Drab
-        Drbc = self.Drbc
-        Drac = self.Drac
-        
-        lrab = self.lrab
-        lrbc = self.lrbc
-        lrac = self.lrac
-        
-        Brab = self.Brab
-        Brbc = self.Brbc
-        Brac = self.Brac
-        
-        xrabi = self.xrabi
-        xrbci = self.xrbci
-        prabi = self.prabi
-        prbci = self.prbci
-        
-        thetai = np.deg2rad(self.theta)
-        
-        vrabi = prabi / mab
-        vrbci = prbci / mbc
-        vraci = 0
-        
-        grad = 2
-        ti = 0
-        
-        Vrinti,Frabi,Frbci,Fraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i = lepspoint(xrabi,xrbci,thetai,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,self.H,grad)
-        xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,Frabi,Frbci,Fraci,vrabi,vrbci,vraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i,ma,mb,mc,ti,dt,False)
-        
-        return Vrinti,Frabi,Frbci,Fraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i,xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti
+        self.get_arrays()
+        get_first(self)
         
     def update_geometry_info(self, *args):
         """Updates the info pane"""
+        self.get_first()
         try:
-            Vrinti,Frabi,Frbci,Fraci,hr1r1,hr1r2,hr1r3,hr2r2,hr2r3,hr3r3,xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = self.get_first()
-            hessian = np.array([[hr1r1, hr1r2, hr1r3], [hr1r2, hr2r2, hr2r3], [hr1r3, hr2r3, hr3r3]])
-            eigenvalues, eigenvectors = np.linalg.eig(hessian)
+            eigenvalues, eigenvectors = np.linalg.eig(self.Current_Hessian)
             
             self._eigenvalues  = eigenvalues
             self._eigenvectors = eigenvectors
             
-            ke     = "{:+7.3f}".format(Ktoti)
-            pe     = "{:+7.3f}".format(Vrinti)
-            etot   = "{:+7.3f}".format(Vrinti + Ktoti)
-            fab    = "{:+7.3f}".format(Frabi)
-            fbc    = "{:+7.3f}".format(Frbci)
+            ke     = "{:+7.3f}".format(self.current_kinetic_energy)
+            pe     = "{:+7.3f}".format(self.current_potential_energy)
+            etot   = "{:+7.3f}".format(self.current_total_energy)
+            fab    = "{:+7.3f}".format(self.Current_First_derivative[0])
+            fbc    = "{:+7.3f}".format(self.Current_First_derivative[1])
             
             eval1  = "{:+7.3f}".format(eigenvalues[0])
             eval2  = "{:+7.3f}".format(eigenvalues[1])
@@ -1339,19 +933,19 @@ class Interactive():
         self.i_evec22["text"] = evec22      
         
 def colorline(
-    x, y, z=None, cmap=plt.get_cmap('copper'), norm=plt.Normalize(0.0, 1.0),
+    Grid_X, Grid_Y, z=None, cmap=plt.get_cmap('copper'), norm=plt.Normalize(0.0, 1.0),
         linewidth=3, alpha=1.0):
     """
     http://nbviewer.ipython.org/github/dpsanders/matplotlib-examples/blob/master/colorline.ipynb
     http://matplotlib.org/examples/pylab_examples/multicolored_line.html
-    Plot a colored line with coordinates x and y
+    Plot a colored line with coordinates Grid_X and Grid_Y
     Optionally specify colors in the array z
     Optionally specify a colormap, a norm function and a line width
     """
 
     # Default colors equally spaced on [0,1]:
     if z is None:
-        z = np.linspace(0.0, 1.0, len(x))
+        z = np.linspace(0.0, 1.0, len(Grid_X))
 
     # Special case if a single number:
     if not hasattr(z, "__iter__"):  # to check for numerical input -- this is a hack
@@ -1359,7 +953,7 @@ def colorline(
 
     z = np.asarray(z)
 
-    segments = make_segments(x, y)
+    segments = make_segments(Grid_X, Grid_Y)
     lc = mcoll.LineCollection(segments, array=z, cmap=cmap, norm=norm,
                               linewidth=linewidth, alpha=alpha)
 
@@ -1367,14 +961,14 @@ def colorline(
     return lc
 
 
-def make_segments(x, y):
+def make_segments(Grid_X, Grid_Y):
     """
-    Create list of line segments from x and y coordinates, in the correct format
-    for LineCollection: an array of the form numlines x (points per line) x 2 (x
-    and y) array
+    Create list of line segments from Grid_X and Grid_Y coordinates, in the correct format
+    for LineCollection: an array of the form numlines times (points per line) times 2 (Grid_X
+    and Grid_Y) array
     """
 
-    points = np.array([x, y]).T.reshape(-1, 1, 2)
+    points = np.array([Grid_X, Grid_Y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
     return segments
         
