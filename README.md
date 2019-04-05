@@ -1,7 +1,7 @@
 # LepsPy: A Molecular Reaction Dynamics Demonstration
 A program to perform classical molecular reaction dynamics for a tri-atomic system using a London-Eyring-Polanyi-Sato (LEPS) potential parameterised for several atoms.
 
-The first Python version of the code was written by Tristan Mackenzie, based on a Matlab version written by Lee Thomson, which in tern built upon a Fortran code written by Barry Smith.
+The first Python version of the code was written by Tristan Mackenzie, based on a Matlab version written by Lee Thompson, which in tern built upon a Fortran code written by Barry Smith.
 
 ### Running the program
 
