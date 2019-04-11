@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 #Created on Mon May 22 16:59:17 2017
 #
 #@author: Tristan Mackenzie
@@ -28,7 +25,8 @@ from lepnorm import lepnorm
 import numpy as np
 from numpy.linalg.linalg import LinAlgError
 
-from configparser import ConfigParser
+from matplotlib import use as mpl_use
+mpl_use("TkAgg") # might need to be changed on different operating systems
 
 import matplotlib.pyplot as plt
 import matplotlib.collections as mcoll
@@ -40,6 +38,7 @@ import tkinter as tk
 import tkinter.messagebox as msgbox
 from tkinter.filedialog import asksaveasfilename
 
+from configparser import ConfigParser
 from argparse import ArgumentParser
 
 class Interactive():
