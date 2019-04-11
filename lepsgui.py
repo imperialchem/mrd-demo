@@ -1,29 +1,28 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Created on Mon May 22 16:59:17 2017
 
-@author: Tristan Mackenzie
+#Created on Mon May 22 16:59:17 2017
+#
+#@author: Tristan Mackenzie
+#
+#    This file is part of LepsPy.
+#
+#    LepsPy is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    LepsPy is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
 
-    This file is part of LepsPy.
-
-    LepsPy is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    LepsPy is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
-
-"""
 
 from params import params
-from lepspoint import lepspoint
+from lepspoint import leps_energy,leps_gradient,leps_hessian
 from lepnorm import lepnorm
 
 import numpy as np
@@ -402,7 +401,6 @@ class Interactive():
             return
 
         resl = 0.02 #Resolution
-        grad = 0    #Gradient calc type (0 = energy)
         self._firstrun = False
         
         #Get grid
@@ -414,22 +412,11 @@ class Interactive():
         for drabcount, drab in enumerate(self.x):
             for drbccount, drbc in enumerate(self.y):
     
-                V = lepspoint(
-                    drab,
-                    drbc,
-                    np.deg2rad(self.theta),
-                    self.Drab,
-                    self.Drbc,
-                    self.Drac,
-                    self.Brab,
-                    self.Brbc,
-                    self.Brac,
-                    self.lrab,
-                    self.lrbc,
-                    self.lrac,
-                    self.H,
-                    grad
-                )
+                V = leps_energy(np.array([drab,drbc,np.deg2rad(self.theta)]),
+                                np.array([[self.Drab,self.Brab,self.lrab],
+                                          [self.Drbc,self.Brbc,self.lrbc],
+                                          [self.Drac,self.Brac,self.lrac]]),
+                                self.H)
                 self.Vmat[drbccount, drabcount] = V
 
         self.old_params = new_params
@@ -462,7 +449,6 @@ class Interactive():
         Brac = self.Brac
         
         thetai = np.deg2rad(self.theta) #Collision Angle
-        grad = 2 #Calculating gradients and Hessian
         
         xrabi = self.xrabi   #Initial AB separation
         xrbci = self.xrbci   #Initial BC separation
@@ -508,21 +494,11 @@ class Interactive():
         self.Vrint = Vrint = []
         self.Ktot  = Ktot  = []
 
-        self.Frab  = Frab  = []
-        self.Frbc  = Frbc  = []
-        self.Frac  = Frac  = []
         self.arab  = arab  = []
         self.arbc  = arbc  = []
         self.arac  = arac  = []
         self.etot  = etot  = []
     
-        self.hr1r1 = hr1r1 = []
-        self.hr1r2 = hr1r2 = []
-        self.hr1r3 = hr1r3 = []
-        self.hr2r2 = hr2r2 = []
-        self.hr2r3 = hr2r3 = []
-        self.hr3r3 = hr3r3 = []
-        
         #Flag to stop appending to output in case of a crash
         terminate = False        
 
@@ -533,26 +509,15 @@ class Interactive():
                 vraci = 0
             
             #Get current potential, forces, and Hessian
-            Vrinti,Frabi,Frbci,Fraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i = lepspoint(xrabi,xrbci,thetai,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,self.H,grad)
+            Vrinti = leps_energy(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
+            forces = -leps_gradient(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
+            hessian = leps_hessian(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
             Vrint.append(Vrinti)
-            Frab.append(Frabi)
-            Frbc.append(Frbci)
-            Frac.append(Fraci)
-            hr1r1.append(hr1r1i)
-            hr1r2.append(hr1r2i)
-            hr1r3.append(hr1r3i)
-            hr2r2.append(hr2r2i)
-            hr2r3.append(hr2r3i)
-            hr3r3.append(hr3r3i)
-            
+
             if self.calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
                 
                 #Diagonalise Hessian
-                hessian = np.array([[hr1r1i, hr1r2i, hr1r3i], [hr1r2i, hr2r2i, hr2r3i], [hr1r3i, hr2r3i, hr3r3i]])
                 eigenvalues, eigenvectors = np.linalg.eig(hessian)
-                
-                #Get forces for opt calculation
-                forces = np.array([Frabi, Frbci, Fraci])
                 
                 #Eigenvalue test
                 neg_eig_i = [i for i,eig in enumerate(eigenvalues) if eig < -0.01]
@@ -591,7 +556,7 @@ class Interactive():
                 
             else: #Dynamics/MEP
                 try:
-                    xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,Frabi,Frbci,Fraci,vrabi,vrbci,vraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i,ma,mb,mc,ti,dt,self.calc_type == "MEP")
+                    xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,forces[0],forces[1],forces[2],vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],ma,mb,mc,ti,dt,self.calc_type == "MEP")
                 except LinAlgError:
                     msgbox.showerror("Surface Error", "Energy could not be evaulated at step {}. Steps truncated".format(itcounter + 1))
                     terminate = True
@@ -1087,11 +1052,12 @@ class Interactive():
         vrbci = prbci / mbc
         vraci = 0
         
-        grad = 2
         ti = 0
         
-        Vrinti,Frabi,Frbci,Fraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i = lepspoint(xrabi,xrbci,thetai,Drab,Drbc,Drac,Brab,Brbc,Brac,lrab,lrbc,lrac,self.H,grad)
-        xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,Frabi,Frbci,Fraci,vrabi,vrbci,vraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i,ma,mb,mc,ti,dt,False)
+        Vrinti = leps_energy(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
+        Frabi,Frbci,Fraci = -leps_gradient(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
+        hessian = leps_hessian(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
+        xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,Frabi,Frbci,Fraci,vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],ma,mb,mc,ti,dt,False)
         
         return Vrinti,Frabi,Frbci,Fraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i,xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti
         
