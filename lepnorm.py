@@ -1,51 +1,50 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-Created on Wed May 17 10:17:56 2017
+#Created on Wed May 17 10:17:56 2017
+#
+#@author: Tristan Mackenzie
+#
+#    This file is part of LepsPy.
+#
+#    LepsPy is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    LepsPy is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
 
-@author: Tristan Mackenzie
-
-    This file is part of LepsPy.
-
-    LepsPy is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    LepsPy is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
-
-"""
 
 import numpy as np
 
-epsilon = 1.0E-15
+def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
+    '''
+    Updates coordinates and momenta by a time step (or an arbitraty step in the
+    case of a minimum energy path (MEP)).
 
-def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,hr2r2,hr2r3,hr3r3,ma,mb,mc,ti,dt,MEP):
+    coord, mom, gradient and hessian are all arrays in internal coordinates rAB,
+    rBC and theta.
+    mass is an array with masses of atoms A, B and C.
+    dt is the size of the timestep.
+    MEP is a boolian defining whether the calculation is a MEP.
 
-    hessian = np.array([[hr1r1, hr1r2, hr1r3], [hr1r2, hr2r2, hr2r3], [hr1r3, hr2r3, hr3r3]])
-    
-    # Reduced masses.
-    mab = (ma*mb)/(ma+mb)
-    mbc = (mb*mc)/(mb+mc)
-    mac = (ma*mc)/(ma+mc)
+    The function first converts from internal coordinates into mass-weighted
+    normal modes, the displacement is calculated in normal modes, and converted
+    back to internal coordinates.
+    '''
 
-    prab = vrabi*mab
-    prbc = vrbci*mbc
-    prac = vraci*mac
-    
+    theta = coord[2]
+
     # G-Matrix
     # See E. B. Wildon Jr., J. C. Decius and P. C. Cross "Molecular Vibrations", McGraw-Hill (1955), sec. 4-6
 
-    GM=np.array([[1/ma + 1/mb, np.cos(theta)/mb, -np.sin(theta)/(drbc*mb)],
-                 [np.cos(theta)/mb, 1/mb + 1/mc, -np.sin(theta)/(drab*mb)],
-                 [-np.sin(theta)/(drbc*mb), -np.sin(theta)/(drab*mb), 1/(drab**2 * ma) + 1/(drbc**2 * mc) + 1/(drab**2 * mb) + 1/(drbc**2 * mb) -2*np.cos(theta)/(drab*drbc*mb)]])
-
+    GM=np.array([[np.sum(1/masses[0:2]), np.cos(theta)/masses[1], -np.sin(theta)/(coord[1]*masses[1])],
+                 [np.cos(theta)/masses[1], np.sum(1/masses[1:]), -np.sin(theta)/(coord[0]*masses[1])],
+                 [-np.sin(theta)/(coord[1]*masses[1]), -np.sin(theta)/(coord[0]*masses[1]),
+                   np.sum(1/(coord[0:2]**2 * masses[0:2])) + np.sum(1/(coord[0:2]**2 * masses[1:])) -2*np.cos(theta)/np.prod(coord[0:2]*masses[1])]])
     
     GMVal, GMVec = np.linalg.eig(GM)
 
@@ -60,56 +59,47 @@ def lepnorm(drab,drbc,theta,Frab,Frbc,Frac,vrabi,vrbci,vraci,hr1r1,hr1r2,hr1r3,h
     # T. Helgaker, E. Uggerud, H.J. Aa. Jensen, Chem. Phys Lett. 173(2,3):145-150 (1990)
 
     # G-Matrix Weighted Hessian;
-    MWH = GRR.dot(hessian).dot(GRR)
-    W2, ALT = np.linalg.eig(MWH); #ALT is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
+    mwhessian = GRR.dot(hessian).dot(GRR)
+    w2, transf = np.linalg.eig(mwhessian); #transf is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
     
     # Gradient Vector in mass-weighted normal modes
-    GRAD = np.array([-Frab, -Frbc, -Frac])
-    GRADN = ALT.T.dot(GRR).dot(GRAD)
+    gradN = transf.T.dot(GRR).dot(gradient)
     
-    # Momentum Vector in normal modes
-    MOM = np.array([prab, prbc, prac])
-    PCMO = ALT.T.dot(GRR).dot(MOM)
-    
-    ktot = 0.5 * np.linalg.norm(PCMO)**2
-    
-    q = np.zeros((3))
-    for i in range(3):
-        if W2[i] < - epsilon:
-            wmod = abs(W2[i]) ** 0.5
-            q[i]=PCMO[i] * np.sinh(wmod*dt) / wmod + GRADN[i] * (1 - np.cosh(wmod*dt)) / (wmod**2)
-            PCMO[i] = PCMO[i] * np.cosh(wmod*dt) - GRADN[i] * np.sinh(wmod*dt) / wmod
-        elif abs(W2[i]) < epsilon:
-            q[i] = PCMO[i] * dt - (0.5 * GRADN[i] * (dt ** 2))
-            PCMO[i] = PCMO[i] - GRADN[i] * dt
-        else:
-            wroot =W2[i] ** 0.5 
-            q[i]=PCMO[i] * np.sin(wroot*dt) / wroot - GRADN[i] * (1 - np.cos(wroot*dt)) / (wroot**2)
-            PCMO[i] = PCMO[i] * np.cos(wroot*dt) - GRADN[i] * np.sin(wroot*dt) / wroot
-            
-    XX = GRR.dot(ALT).dot(q)
-        
-    if MEP:
-      XX *= 5
-      
-      
-        
-    drabf = drab + XX[0]
-    drbcf = drbc + XX[1]
-    thetaf = theta + XX[2]
-    dracf = ((drab ** 2) + (drbc ** 2) - 2 * drab * drbc * np.cos(thetaf)) ** 0.5
-    MOM = GROOT.dot(ALT).dot(PCMO)
-    
-    tf = ti + dt
-    vrabf = MOM[0] / mab
-    vrbcf = MOM[1] / mbc
-    vracf = 0
-    
-    arab = Frab / mab
-    arbc = Frbc / mbc
-    if (arab + arbc < 0):
-        arac = - ((arab ** 2) + (arbc ** 2) - 2 * arab * arbc * np.cos(thetaf)) ** 0.5
+    if not MEP: 
+        # Momentum Vector in normal modes
+        momN = transf.T.dot(GRR).dot(mom)
     else:
-        arac =   ((arab ** 2) + (arbc ** 2) - 2 * arab * arbc * np.cos(thetaf)) ** 0.5
+        # enforce zero momentum
+        momN = np.zeros(3)
+        # effectivelly increase step to compensate absence of inertial term
+        dt = dt * 10
     
-    return drabf,drbcf,dracf,thetaf,vrabf,vrbcf,vracf,tf,arab,arbc,arac,ktot
+    displacementN = np.zeros(3)
+
+    epsilon = 1e-15
+
+    for i in range(3):
+        if w2[i] < - epsilon: # negative curvature of the potential
+            wmod = abs(w2[i]) ** 0.5
+            displacementN[i]=momN[i] * np.sinh(wmod*dt) / wmod + gradN[i] * (1 - np.cosh(wmod*dt)) / (wmod**2)
+            if not MEP:
+                momN[i] = momN[i] * np.cosh(wmod*dt) - gradN[i] * np.sinh(wmod*dt) / wmod
+        elif abs(w2[i]) < epsilon: # no curvature in potential
+            displacementN[i] = momN[i] * dt - (0.5 * gradN[i] * (dt ** 2))
+            if not MEP:
+                momN[i] = momN[i] - gradN[i] * dt
+        else: # positive curvature of the potential
+            wroot =w2[i] ** 0.5 
+            displacementN[i]=momN[i] * np.sin(wroot*dt) / wroot - gradN[i] * (1 - np.cos(wroot*dt)) / (wroot**2)
+            if not MEP:
+                momN[i] = momN[i] * np.cos(wroot*dt) - gradN[i] * np.sin(wroot*dt) / wroot
+            
+    # update coordinates by first transforming displacementN into internal coordinates
+    coord = coord + GRR.dot(transf).dot(displacementN) 
+    
+    # transform updated momentum back into internal coordinates
+    mom = GROOT.dot(transf).dot(momN)
+        
+    ktot = 0.5 * np.linalg.norm(momN)**2 # convenient way to calculate kinetic energy
+    
+    return (coord,mom,ktot)

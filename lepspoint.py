@@ -32,12 +32,13 @@ k = 0.18 # In TRIATOMICS this is 0.18 but should be Sato parameter?
 state = 1 # 1 for ground state, >1 for excited states
 
 
-def cos_rule(sas):
-    '''Use the cos rule to calculate the length of the side of a triangle,
+def cos_rule(side1,side2,angle):
+    '''
+    Use the cos rule to calculate the length of the side of a triangle,
     given the other 2 side lengths and the angle between them.
-    sas = array([rAB,rBC,theta]).'''
+    '''
 
-    return  (sas[0]**2 + sas[1]**2 - 2*sas[0]*sas[1]*np.cos(sas[2]))**0.5
+    return  (side1**2 + side2**2 - 2*side1*side2*np.cos(angle))**0.5
 
 
 def _morse(r,D,B,re):
@@ -101,7 +102,7 @@ def leps_energy(int_coord,params,H):
                      [D_C,B_C,re_C]]).'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(int_coord)])
+    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
  
    #Coulomb and Exchange integrals
     Q=_coulomb(_morse(r,params[:,0],params[:,1],params[:,2]),
@@ -122,7 +123,7 @@ def leps_gradient(int_coord,params,H):
        grad=array([dV/drAB,dV/drBC,dV/dtheta]).'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(int_coord)])
+    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
 
     #Exchange integrals (Coulomb not needed)
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
@@ -166,7 +167,7 @@ def leps_hessian(int_coord,params,H):
        The gradient is given in internal coordinates,'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(int_coord)])
+    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
 
     #Exchange integrals (Coulomb not needed)
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
