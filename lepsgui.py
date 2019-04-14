@@ -993,39 +993,39 @@ class Interactive():
         
     def update_geometry_info(self, *args):
         """Updates the info pane"""
-#        try:
-        Vrinti,gradient,hessian,Ktoti = self.get_first()
-        eigenvalues, eigenvectors = np.linalg.eig(hessian)
-
-        self._eigenvalues  = eigenvalues
-        self._eigenvectors = eigenvectors
-       
-        ke     = "{:+7.3f}".format(Ktoti)
-        pe     = "{:+7.3f}".format(Vrinti)
-        etot   = "{:+7.3f}".format(Vrinti + Ktoti)
-        fab    = "{:+7.3f}".format(-gradient[0])
-        fbc    = "{:+7.3f}".format(-gradient[1])
-       
-        eval1  = "{:+7.3f}".format(eigenvalues[0])
-        eval2  = "{:+7.3f}".format(eigenvalues[1])
-       
-        evec11 = "{:+7.3f}".format(eigenvectors[0][0])
-        evec12 = "{:+7.3f}".format(eigenvectors[0][1])
-        evec21 = "{:+7.3f}".format(eigenvectors[1][0])
-        evec22 = "{:+7.3f}".format(eigenvectors[1][1])
+        try:
+            Vrinti,gradient,hessian,Ktoti = self.get_first()
+            eigenvalues, eigenvectors = np.linalg.eig(hessian)
+ 
+            self._eigenvalues  = eigenvalues
+            self._eigenvectors = eigenvectors
+           
+            ke     = "{:+7.3f}".format(Ktoti)
+            pe     = "{:+7.3f}".format(Vrinti)
+            etot   = "{:+7.3f}".format(Vrinti + Ktoti)
+            fab    = "{:+7.3f}".format(-gradient[0])
+            fbc    = "{:+7.3f}".format(-gradient[1])
+           
+            eval1  = "{:+7.3f}".format(eigenvalues[0])
+            eval2  = "{:+7.3f}".format(eigenvalues[1])
+           
+            evec11 = "{:+7.3f}".format(eigenvectors[0][0])
+            evec12 = "{:+7.3f}".format(eigenvectors[0][1])
+            evec21 = "{:+7.3f}".format(eigenvectors[1][0])
+            evec22 = "{:+7.3f}".format(eigenvectors[1][1])
             
-#        except:
-#            ke     = "       "
-#            pe     = "       "
-#            etot   = "       "
-#            fab    = "       "
-#            fbc    = "       "
-#            eval1  = "       "
-#            eval2  = "       "
-#            evec11 = "       "
-#            evec12 = "       "
-#            evec21 = "       "
-#            evec22 = "       "
+        except:
+            ke     = "       "
+            pe     = "       "
+            etot   = "       "
+            fab    = "       "
+            fbc    = "       "
+            eval1  = "       "
+            eval2  = "       "
+            evec11 = "       "
+            evec12 = "       "
+            evec21 = "       "
+            evec22 = "       "
             
         self.i_ke["text"] = ke
         self.i_pe["text"] = pe
