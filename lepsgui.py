@@ -53,28 +53,28 @@ class Interactive():
         ###Initialise defaults###
         
         config = ConfigParser(inline_comment_prefixes=(';', '#'))
+        # The line below allows for dictionary keys with capital letters
+        config.optionxform = lambda op:op
         config.read('params.ini')
         
         #Atom: [Index, VdW radius, colour]
-        #Index      - index in dropdown list in selection
         #VdW radius - used for animation
         #Colour     - used for animation
         atom_map = {}
         atoms = config['atoms']
         self.atoms_list = []
-        for k, l in atoms.items():
-            mass, vdw, colour, name = l.split(',')
-            atom_map[name.strip()] = [
-                int(k),
+        for element, l in atoms.items():
+            mass, vdw, colour = l.split(',')
+            atom_map[element] = [
                 float(vdw),
                 '#' + colour.strip()            
             ]
-            self.atoms_list.append(name.strip())
+            self.atoms_list.append(element)
         self.atom_map = atom_map
         
         defaults = config['defaults']
         self.dt  = float(defaults['dt'])  #Time step in dynamics trajectory
-        self.H   = float(defaults['H'])   #Surface parameter
+        self.H   = float(defaults['Hparam'])   #Surface parameter
         self.lim = float(defaults['lim']) #Calculation will stop once this distance is exceeded
 
         self.Vmat = None       #Array where potential is stored for each gridpoint
@@ -83,9 +83,9 @@ class Interactive():
         self.entries  = {} #Dictionary of entries to be read on refresh (user input)
         self.defaults = {  #Defaults for each entry
            #Key        : Default value  , type , processing function
-            "a"        : ["H"           , str  , lambda x: self.atom_map[x][0]],
-            "b"        : ["H"           , str  , lambda x: self.atom_map[x][0]],
-            "c"        : ["H"           , str  , lambda x: self.atom_map[x][0]],
+            "a"        : ["H"           , str  , None                         ],
+            "b"        : ["H"           , str  , None                         ],
+            "c"        : ["H"           , str  , None                         ],
             "xrabi"    : ["2.3"         , float, None                         ],
             "xrbci"    : ["0.74"        , float, None                         ],
             "prabi"    : ["-2.5"        , float, None                         ],
@@ -358,38 +358,15 @@ class Interactive():
         """This gets parameters for a given set of atoms"""
         #Params
         try:
-            ma,mb,mc,Drab,Drbc,Drac,lrab,lrbc,lrac,Brab,Brbc,Brac,mina,maxa,minb,maxb = params(self.a,self.b,self.c)
+            self.masses,self.morse_params,self.plot_limits = params(self.a,self.b,self.c)
         except Exception:
             msgbox.showerror("Error", "Parameters for this atom combination not available!")
             raise
         
-        #Masses
-        self.ma   = ma
-        self.mb   = mb
-        self.mc   = mc
-        
-        #LEPS Parameters
-        self.Drab = Drab
-        self.Drbc = Drbc
-        self.Drac = Drac
-        self.lrab = lrab
-        self.lrbc = lrbc
-        self.lrac = lrac
-        self.Brab = Brab
-        self.Brbc = Brbc
-        self.Brac = Brac
-        
-        #Plot parameters
-        self.mina = mina
-        self.maxa = maxa
-        self.minb = minb
-        self.maxb = maxb
-        
-        # Reduced masses.
-        self.mab = (ma * mb) / (ma + mb)
-        self.mbc = (mb * mc) / (mb + mc)
-        self.mac = (ma * mc) / (ma + mc)
-            
+        self.reduced_masses = np.array([(self.masses[0]*self.masses[1])/(self.masses[0]+self.masses[1]),
+                                        (self.masses[1]*self.masses[2])/(self.masses[1]+self.masses[2]),
+                                        (self.masses[0]*self.masses[2])/(self.masses[0]+self.masses[2])])
+ 
     def get_surface(self):
         """Get Vmat (potential) for a given set of parameters"""
         self.get_params()
@@ -403,8 +380,9 @@ class Interactive():
         self._firstrun = False
         
         #Get grid
-        self.x = np.arange(self.mina,self.maxa,resl)
-        self.y = np.arange(self.minb,self.maxb,resl)
+        self.x = np.arange(self.plot_limits[0,0],self.plot_limits[0,1],resl)
+        self.y = np.arange(self.plot_limits[1,0],self.plot_limits[1,1],resl)
+
         self.Vmat = np.zeros((len(self.y), len(self.x)))
         
         #Calculate potential for each gridpoint
@@ -412,10 +390,7 @@ class Interactive():
             for drbccount, drbc in enumerate(self.y):
     
                 V = leps_energy(np.array([drab,drbc,np.deg2rad(self.theta)]),
-                                np.array([[self.Drab,self.Brab,self.lrab],
-                                          [self.Drbc,self.Brbc,self.lrbc],
-                                          [self.Drac,self.Brac,self.lrac]]),
-                                self.H)
+                   self.morse_params,self.H)
                 self.Vmat[drbccount, drabcount] = V
 
         self.old_params = new_params
@@ -428,25 +403,6 @@ class Interactive():
         ti      = 0          #Initial time variable
         tf      = 0          #Final time variable
         
-        ma   = self.ma       #Mass of A
-        mb   = self.mb       #Mass of B
-        mc   = self.mc       #Mass of C
-        
-        mab  = self.mab      #Reduced mass of AB
-        mbc  = self.mbc      #Reduced mass of BC
-        
-        Drab = self.Drab
-        Drbc = self.Drbc
-        Drac = self.Drac
-        
-        lrab = self.lrab
-        lrbc = self.lrbc
-        lrac = self.lrac
-        
-        Brab = self.Brab
-        Brbc = self.Brbc
-        Brac = self.Brac
-        
         thetai = np.deg2rad(self.theta) #Collision Angle
         
         xrabi = self.xrabi   #Initial AB separation
@@ -455,30 +411,25 @@ class Interactive():
         prabi = self.prabi   #Initial AB momentum
         prbci = self.prbci   #Initial BC momentum
         
-        vrabi = prabi / mab  #Initial AB Velocity
-        vrbci = prbci / mbc  #Initial BC Velocity
+        vrabi = prabi / self.reduced_masses[0]  #Initial AB Velocity
+        vrbci = prbci / self.reduced_masses[1]  #Initial BC Velocity
         
         #Positions of A, B and C relative to B
-        a = np.array([- xrabi, 0.])
-        b = np.array([0., 0.])
-        c = np.array([- np.cos(thetai) * xrbci, np.sin(thetai) * xrbci])
+        positions = np.array([[- xrabi, 0.],[0., 0.],[- np.cos(thetai) * xrbci, np.sin(thetai) * xrbci]])
         
         #Get centre of mass
-        com = (a * ma + b * mb + c * mc) / (ma + mb + mc)
-        com = np.real(com)
+        com = self.masses.dot(positions)/np.sum(self.masses)
         
         #Translate to centre of mass (for animation)
-        a -= com
-        b -= com
-        c -= com
+        positions = positions - com
         
-        self.ra    = [a]
-        self.rb    = [b]
-        self.rc    = [c]
+        self.ra    = [positions[0]]
+        self.rb    = [positions[1]]
+        self.rc    = [positions[2]]
         
         #Initial AC Velocity
-        va = (a - self.ra[-1]) / dt
-        vc = (c - self.rc[-1]) / dt
+        va = vrabi*(positions[0]-positions[1])/np.linalg.norm(positions[0]-positions[1])
+        vc = vrbci*(positions[2]-positions[1])/np.linalg.norm(positions[2]-positions[1])
         vraci = np.linalg.norm(va + vc)
         
         #Initialise outputs
@@ -508,9 +459,9 @@ class Interactive():
                 vraci = 0
             
             #Get current potential, forces, and Hessian
-            Vrinti = leps_energy(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
-            forces = -leps_gradient(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
-            hessian = leps_hessian(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
+            Vrinti = leps_energy(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
+            forces = -leps_gradient(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
+            hessian = leps_hessian(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
             Vrint.append(Vrinti)
 
             if self.calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
@@ -555,7 +506,7 @@ class Interactive():
                 
             else: #Dynamics/MEP
                 try:
-                    xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,forces[0],forces[1],forces[2],vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],ma,mb,mc,ti,dt,self.calc_type == "MEP")
+                    xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,forces[0],forces[1],forces[2],vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],self.masses[0],self.masses[1],self.masses[2],ti,dt,self.calc_type == "MEP")
                 except LinAlgError:
                     msgbox.showerror("Surface Error", "Energy could not be evaulated at step {}. Steps truncated".format(itcounter + 1))
                     terminate = True
@@ -575,25 +526,27 @@ class Interactive():
             if itcounter != itlimit - 1 and not terminate:
                 
                 #As above
-                a = np.array([- xrabf, 0.])
-                b = np.array([0., 0.])
-                c = np.array([- np.cos(thetaf) * xrbcf, np.sin(thetaf) * xrbcf])
-                com = (a * ma + b * mb + c * mc) / (ma + mb + mc)
-
-                com = np.real(com)
-                
-                a -= com
-                b -= com
-                c -= com
+	        #Positions of A, B and C relative to B
+                positions = np.array([[- xrabf, 0.],[0., 0.],[- np.cos(thetaf) * xrbci, np.sin(thetaf) * xrbcf]])
+        
+	        #Get centre of mass
+                com = self.masses.dot(positions)/np.sum(self.masses)
+        
+	        #Translate to centre of mass (for animation)
+                positions = positions - com
+        
+                a    = [positions[0]]
+                b    = [positions[1]]
+                c    = [positions[2]]
                 
                 #Get A-C Velocity
                 r0 = np.linalg.norm(self.rc[-1] - self.ra[-1])
-                r1 = np.linalg.norm(c - a)
+                r1 = np.linalg.norm(positions[2] - positions[0])
                 vrac = (r1 - r0) / dt
                 
-                self.ra.append(a)                       #A  Pos
-                self.rb.append(b)                       #B  Pos
-                self.rc.append(c)                       #C  Pos
+                self.ra.append(positions[0])            #A  Pos
+                self.rb.append(positions[1])            #B  Pos
+                self.rc.append(positions[2])            #C  Pos
                 self.xrab.append(xrabf)                 #A-B Distance
                 self.xrbc.append(xrbcf)                 #B-C Distance
                 self.xrac.append(xracf)                 #A-C Distance
@@ -628,10 +581,10 @@ class Interactive():
         self.entries["xrbci"][0].insert(0, self.xrbc[-1])
         
         self.entries["prabi"][0].delete(0, tk.END)
-        self.entries["prabi"][0].insert(0, self.vrab[-1] * self.mab)
+        self.entries["prabi"][0].insert(0, self.vrab[-1] * self.reduced_masses[0])
         
         self.entries["prbci"][0].delete(0, tk.END)
-        self.entries["prbci"][0].insert(0, self.vrbc[-1] * self.mbc)
+        self.entries["prbci"][0].insert(0, self.vrbc[-1] * self.reduced_masses[0])
             
     def export(self, *args):
         """Run calculation and print output in CSV format"""
@@ -650,21 +603,21 @@ class Interactive():
             ["AB Velocity",     self.vrab                        ],
             ["BC Velocity",     self.vrbc                        ],
             ["AC Velocity",     self.vrac                        ],
-            ["AB Momentum",     [v * self.mab for v in self.vrab]],
-            ["BC Momentum",     [v * self.mab for v in self.vrab]],
-            ["AC Momentum",     [v * self.mab for v in self.vrab]],
-            ["AB Force",        self.Frab                        ],
-            ["BC Force",        self.Frbc                        ],
-            ["AC Force",        self.Frac                        ],
+            ["AB Momentum",     self.vrab*self.reduced_masses[0] ],
+            ["BC Momentum",     self.vrab*self.reduced_masses[1] ],
+            ["AC Momentum",     self.vrab*self.reduced_masses[2] ],
+            ["AB Force",        -self.gradient[0]                ],
+            ["BC Force",        -self.gradient[1]                ],
+            ["theta Force",     -self.gradient[2]                ],
             ["Total Potential", self.Vrint                       ],
             ["Total Kinetic",   self.Ktot                        ],
             ["Total Energy",    self.etot                        ],
-            ["AB AB Hess Comp", self.hr1r1                       ],
-            ["AB BC Hess Comp", self.hr1r2                       ],
-            ["AB AC Hess Comp", self.hr1r3                       ],
-            ["BC BC Hess Comp", self.hr2r2                       ],
-            ["BC AC Hess Comp", self.hr2r3                       ],
-            ["AC AC Hess Comp", self.hr3r3                       ]
+            ["AB AB Hess Comp", self.hessian[0,0]                ],
+            ["AB BC Hess Comp", self.hessian[0,1]                ],
+            ["AB theta Hess Comp", self.hessian[0,2]             ],
+            ["BC BC Hess Comp", self.hessian[1,1]                ],
+            ["BC theta Hess Comp", self.hessian[1,2]             ],
+            ["theta theta Hess Comp", self.hessian[2,2]          ]
         ]
         
         out = ",".join([t for t, s in sources]) + "\n"
@@ -759,12 +712,10 @@ class Interactive():
         
         X, Y = np.meshgrid(self.x, self.y)
         
-        ma = self.ma
-        mb = self.mb
-        mc = self.mc
+        ma,mb,mc = self.masses
         
-        a    = ((ma * (mb + mc)) / (ma + mb + mc)) ** 0.5
-        b    = ((mc * (ma + mb)) / (ma + mb + mc)) ** 0.5
+        a    = ((ma * (mb + mc)) / np.sum(self.masses)) ** 0.5
+        b    = ((mc * (ma + mb)) / np.sum(self.masses)) ** 0.5
         beta = np.arccos(((ma * mc) / ((mb + mc) * (ma + mb))) ** 0.5)
 
         #Transform grid
@@ -964,9 +915,9 @@ class Interactive():
         
         for at_name in ["a", "b", "c"]:
             at = self.entries[at_name][0].get()
-            index, vdw, c = self.atom_map[at]
+            vdw, col = self.atom_map[at]
             pos = getattr(self, "r" + at_name)[0]
-            patch = plt.Circle(pos, vdw * 0.25, fc = c)
+            patch = plt.Circle(pos, vdw * 0.25, color = col)
             patches.append(patch)
         
         self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(self.ra), repeat=True, interval=20)
@@ -1021,25 +972,6 @@ class Interactive():
         self.get_params()
         dt   = self.dt
         
-        ma   = self.ma
-        mb   = self.mb
-        mc   = self.mc
-        
-        mab  = self.mab
-        mbc  = self.mbc
-        
-        Drab = self.Drab
-        Drbc = self.Drbc
-        Drac = self.Drac
-        
-        lrab = self.lrab
-        lrbc = self.lrbc
-        lrac = self.lrac
-        
-        Brab = self.Brab
-        Brbc = self.Brbc
-        Brac = self.Brac
-        
         xrabi = self.xrabi
         xrbci = self.xrbci
         prabi = self.prabi
@@ -1047,24 +979,24 @@ class Interactive():
         
         thetai = np.deg2rad(self.theta)
         
-        vrabi = prabi / mab
-        vrbci = prbci / mbc
+        vrabi = prabi / self.reduce_masses[0]
+        vrbci = prbci / self.reduced_masses[1]
         vraci = 0
         
         ti = 0
         
-        Vrinti = leps_energy(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
-        Frabi,Frbci,Fraci = -leps_gradient(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
-        hessian = leps_hessian(np.array([xrabi,xrbci,thetai]),np.array([[Drab,Brab,lrab],[Drbc,Brbc,lrbc],[Drac,Brac,lrac]]),self.H)
-        xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = lepnorm(xrabi,xrbci,thetai,Frabi,Frbci,Fraci,vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],ma,mb,mc,ti,dt,False)
+        Vrinti = leps_energy(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
+        gradient = leps_gradient(np.array([xrabi,xrbci,thetai]),self.morse_mparams,self.H)
+        hessian = leps_hessian(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
+        # Call lepnorm just to get the kinetic energy
+        Ktoti = lepnorm(xrabi,xrbci,thetai,i-gradient[0],-gradient[1],-gradient[2],vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],lef,masses[0],self.masses[1],self_masses[2],ti,dt,False)[-1]
         
-        return Vrinti,Frabi,Frbci,Fraci,hr1r1i,hr1r2i,hr1r3i,hr2r2i,hr2r3i,hr3r3i,xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti
+        return Vrinti,gradient,hessian,Ktoti
         
     def update_geometry_info(self, *args):
         """Updates the info pane"""
         try:
-            Vrinti,Frabi,Frbci,Fraci,hr1r1,hr1r2,hr1r3,hr2r2,hr2r3,hr3r3,xrabf,xrbcf,xracf,thetaf,vrabf,vrbcf,vracf,tf,arabi,arbci,araci,Ktoti = self.get_first()
-            hessian = np.array([[hr1r1, hr1r2, hr1r3], [hr1r2, hr2r2, hr2r3], [hr1r3, hr2r3, hr3r3]])
+            Vrinti,gradient,hessian,Ktoti = self.get_first()
             eigenvalues, eigenvectors = np.linalg.eig(hessian)
             
             self._eigenvalues  = eigenvalues
@@ -1073,8 +1005,8 @@ class Interactive():
             ke     = "{:+7.3f}".format(Ktoti)
             pe     = "{:+7.3f}".format(Vrinti)
             etot   = "{:+7.3f}".format(Vrinti + Ktoti)
-            fab    = "{:+7.3f}".format(Frabi)
-            fbc    = "{:+7.3f}".format(Frbci)
+            fab    = "{:+7.3f}".format(-gradient[0])
+            fbc    = "{:+7.3f}".format(-gradient[1])
             
             eval1  = "{:+7.3f}".format(eigenvalues[0])
             eval2  = "{:+7.3f}".format(eigenvalues[1])

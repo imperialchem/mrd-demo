@@ -1,30 +1,28 @@
-#!/usr/bin/env python2
-# -*- coding: utf-8 -*-
-"""
-Created on Wed May 17 11:30:28 2017
+#Created on Wed May 17 11:30:28 2017
+#
+#@author: Tristan Mackenzie
+#
+#    This file is part of LepsPy.
+#
+#    LepsPy is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    LepsPy is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
 
-@author: Tristan Mackenzie
-
-    This file is part of LepsPy.
-
-    LepsPy is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    LepsPy is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
-
-"""
 
 from configparser import ConfigParser
+import numpy as np
 
 def _get_mass(config, key):
+    '''Get the mass of a given atom from the config file.'''
     
     try:
         d = config['atoms']
@@ -38,37 +36,39 @@ def _get_mass(config, key):
     return m
     
 def _get_morse(config, key):
+    '''Gets parameters for a Morse potential from a config file for a given
+    combination of 2 atoms.'''
     
     try:
         d = config['morse']
         m = d[key]
-        m = [float(p) for p in m.split(',')]
-        assert len(m) == 3
+        params = [float(p) for p in m.split(',')]
+        assert len(params) == 3
     except KeyError:
         raise KeyError('Morse potential not available for atom pair {}'.format(key))
     except:
         raise RuntimeError('Parameter file corrupted. Cannot get morse parater for atom pair {}'.format(key))
     
-    return m
+    return params
     
 def _get_limits(config, key):
+    '''Gets plot limits from config file a a given combination of 3 atoms.'''
     
     try:
         d = config['limits']
         l = d[key]
-        l = [float(p) for p in l.split(',')]
-        assert len(l) == 4
+        limits = [float(p) for p in l.split(',')]
+        assert len(limits) == 4
     except KeyError:
         raise KeyError('Limits not available for atoms {}'.format(key))
     except:
         raise RuntimeError('Parameter file corrupted. Cannot get morse parater for atom pair {}'.format(key))
     
-    return l
+    return limits
 
 def params(a,b,c):
-
-    # Gets the parameters for any atom set or returns error message if no
-    # parameters exist.
+    '''Gets the parameters for any atom set or returns error message if no
+    parameters exist.'''
     
     #Open parameter file
     config = ConfigParser(inline_comment_prefixes=(';', '#'))
@@ -77,15 +77,7 @@ def params(a,b,c):
         isotopes = config['isotopes']
     except:
         isotopes = {}
-    
-    # labels:
-    # H F Cl D I O
-    # 1 2 3  4 5 6
-    
-    
-    a   = str(a)
-    b   = str(b)
-    c   = str(c)
+     
     ab  = (a + b)
     bc  = (b + c)
     ac  = (a + c)
@@ -100,17 +92,15 @@ def params(a,b,c):
         abc = abc.replace(i, o)
 
     # Masses
-    ma = _get_mass(config, a)
-    mb = _get_mass(config, b)
-    mc = _get_mass(config, c)
+    masses = np.array([_get_mass(config, a),_get_mass(config, b),_get_mass(config, c)])
     
 
     # Morse Parameters
-    Drab, lrab, Brab = _get_morse(config, ab)
-    Drbc, lrbc, Brbc = _get_morse(config, bc)
-    Drac, lrac, Brac = _get_morse(config, ac)
+    morse_params = np.array([_get_morse(config, ab),
+                            _get_morse(config, bc),
+                            _get_morse(config, ac)])
      
     # Plot Limits
-    mina, maxa, minb, maxb = _get_limits(config, abc)
+    plot_limits = np.reshape(np.array(_get_limits(config, abc)),(2,2))
 
-    return ma,mb,mc,Drab,Drbc,Drac,lrab,lrbc,lrac,Brab,Brbc,Brac,mina,maxa,minb,maxb
+    return (masses,morse_params,plot_limits)
