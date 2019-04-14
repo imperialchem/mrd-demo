@@ -213,20 +213,18 @@ class Interactive():
         self.i_etot = self._add_label(energy_frame, {"text": ""}, gk('12'))
         
         forces_frame = self._add_frame(dict(master=geometry_frame, text="Forces", **sunken), gk('200055news'))
-        self._add_label(forces_frame, {"text": "AB:        "}, gk('00'))
-        self._add_label(forces_frame, {"text": "BC:        "}, gk('01'))
-        self._add_label(forces_frame, {"text": "Total:     "}, gk('02'))
+        self._add_label(forces_frame, {"text": "along AB: "}, gk('00'))
+        self._add_label(forces_frame, {"text": "along BC: "}, gk('10'))
         
-        self.i_fab  = self._add_label(forces_frame, {"text": ""}, gk('10'))
+        self.i_fab  = self._add_label(forces_frame, {"text": ""}, gk('01'))
         self.i_fbc  = self._add_label(forces_frame, {"text": ""}, gk('11'))
-        self.i_ftot = self._add_label(forces_frame, {"text": ""}, gk('12'))
         
         hessian_frame = self._add_frame(dict(master=geometry_frame, text="Hessian", **sunken), gk('300055news'))
         self._add_label(hessian_frame, {"text": "1:         "}, gk('01'))
         self._add_label(hessian_frame, {"text": "2:         "}, gk('02'))
-        self._add_label(hessian_frame, {"text": "Eigenvalue:"}, gk('10'))
-        self._add_label(hessian_frame, {"text": "AB Vector: "}, gk('20'))
-        self._add_label(hessian_frame, {"text": "BC Vector: "}, gk('30'))
+        self._add_label(hessian_frame, {"text": "     ω²"}    , gk('10'))
+        self._add_label(hessian_frame, {"text": "AB direction:"}, gk('20'))
+        self._add_label(hessian_frame, {"text": "BC direction:"}, gk('30'))
         
         self.i_eval1 = self._add_label(hessian_frame, {"text": ""}, gk('11'))
         self.i_eval2 = self._add_label(hessian_frame, {"text": ""}, gk('12'))
@@ -979,55 +977,55 @@ class Interactive():
         
         thetai = np.deg2rad(self.theta)
         
-        vrabi = prabi / self.reduce_masses[0]
+        vrabi = prabi / self.reduced_masses[0]
         vrbci = prbci / self.reduced_masses[1]
         vraci = 0
         
         ti = 0
         
         Vrinti = leps_energy(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
-        gradient = leps_gradient(np.array([xrabi,xrbci,thetai]),self.morse_mparams,self.H)
+        gradient = leps_gradient(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
         hessian = leps_hessian(np.array([xrabi,xrbci,thetai]),self.morse_params,self.H)
         # Call lepnorm just to get the kinetic energy
-        Ktoti = lepnorm(xrabi,xrbci,thetai,i-gradient[0],-gradient[1],-gradient[2],vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],lef,masses[0],self.masses[1],self_masses[2],ti,dt,False)[-1]
+        Ktoti = lepnorm(xrabi,xrbci,thetai,-gradient[0],-gradient[1],-gradient[2],vrabi,vrbci,vraci,hessian[0,0],hessian[0,1],hessian[0,2],hessian[1,1],hessian[1,2],hessian[2,2],self.masses[0],self.masses[1],self.masses[2],ti,dt,False)[-1]
         
         return Vrinti,gradient,hessian,Ktoti
         
     def update_geometry_info(self, *args):
         """Updates the info pane"""
-        try:
-            Vrinti,gradient,hessian,Ktoti = self.get_first()
-            eigenvalues, eigenvectors = np.linalg.eig(hessian)
+#        try:
+        Vrinti,gradient,hessian,Ktoti = self.get_first()
+        eigenvalues, eigenvectors = np.linalg.eig(hessian)
+
+        self._eigenvalues  = eigenvalues
+        self._eigenvectors = eigenvectors
+       
+        ke     = "{:+7.3f}".format(Ktoti)
+        pe     = "{:+7.3f}".format(Vrinti)
+        etot   = "{:+7.3f}".format(Vrinti + Ktoti)
+        fab    = "{:+7.3f}".format(-gradient[0])
+        fbc    = "{:+7.3f}".format(-gradient[1])
+       
+        eval1  = "{:+7.3f}".format(eigenvalues[0])
+        eval2  = "{:+7.3f}".format(eigenvalues[1])
+       
+        evec11 = "{:+7.3f}".format(eigenvectors[0][0])
+        evec12 = "{:+7.3f}".format(eigenvectors[0][1])
+        evec21 = "{:+7.3f}".format(eigenvectors[1][0])
+        evec22 = "{:+7.3f}".format(eigenvectors[1][1])
             
-            self._eigenvalues  = eigenvalues
-            self._eigenvectors = eigenvectors
-            
-            ke     = "{:+7.3f}".format(Ktoti)
-            pe     = "{:+7.3f}".format(Vrinti)
-            etot   = "{:+7.3f}".format(Vrinti + Ktoti)
-            fab    = "{:+7.3f}".format(-gradient[0])
-            fbc    = "{:+7.3f}".format(-gradient[1])
-            
-            eval1  = "{:+7.3f}".format(eigenvalues[0])
-            eval2  = "{:+7.3f}".format(eigenvalues[1])
-            
-            evec11 = "{:+7.3f}".format(eigenvectors[0][0])
-            evec12 = "{:+7.3f}".format(eigenvectors[0][1])
-            evec21 = "{:+7.3f}".format(eigenvectors[1][0])
-            evec22 = "{:+7.3f}".format(eigenvectors[1][1])
-            
-        except:
-            ke     = "       "
-            pe     = "       "
-            etot   = "       "
-            fab    = "       "
-            fbc    = "       "
-            eval1  = "       "
-            eval2  = "       "
-            evec11 = "       "
-            evec12 = "       "
-            evec21 = "       "
-            evec22 = "       "
+#        except:
+#            ke     = "       "
+#            pe     = "       "
+#            etot   = "       "
+#            fab    = "       "
+#            fbc    = "       "
+#            eval1  = "       "
+#            eval2  = "       "
+#            evec11 = "       "
+#            evec12 = "       "
+#            evec21 = "       "
+#            evec22 = "       "
             
         self.i_ke["text"] = ke
         self.i_pe["text"] = pe
