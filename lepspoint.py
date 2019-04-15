@@ -110,7 +110,7 @@ def leps_energy(int_coord,params,H):
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
                 _anti_morse(r,params[:,0],params[:,1],params[:,2]),k)
    
-    return 1/(1+H**2) * (np.sum(Q) - state/2**0.5 *np.linalg.norm(J - np.roll(J,1)))
+    return 1/(1+H**2) * (np.sum(Q) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1)))
 
 
 def leps_gradient(int_coord,params,H):

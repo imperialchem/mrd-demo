@@ -367,7 +367,7 @@ class Interactive():
  
     def get_surface(self):
         """Get Vmat (potential) for a given set of parameters"""
-#        self.get_params()
+        self.get_params()
         
         #Check if params have changed. If not, no need to recalculate
         new_params = [self.a, self.b, self.c, self.theta]
