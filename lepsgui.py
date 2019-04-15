@@ -406,18 +406,7 @@ class Interactive():
             # If not dynamics, set momenta to zero
             self.mom=np.zeros(3)
         
-        
-        #Positions (vectors) of A, B and C relative to B
-        pos = np.array([[- self.coord[0], 0.],[0., 0.],[- np.cos(self.coord[2]) * self.coord[1], np.sin(self.coord[2]) * self.coord[1]]])
-        
-        #Get centre of mass
-        com = self.masses.dot(pos)/np.sum(self.masses)
-        
-        #Translate to centre of mass (for animation)
-        pos = pos - com
-        
         #Initialise outputs
-        self.positions = [pos]
         self.trajectory = [np.column_stack((self.coord,self.mom))]
         self.energies = []
 
@@ -478,18 +467,7 @@ class Interactive():
                  
             if itcounter != self.steps - 1 and not terminate:
                 
-                #As above
-	        #Positions of A, B and C relative to B
-                pos = np.array([[- self.coord[0], 0.],[0., 0.],[- np.cos(self.coord[2]) * self.coord[1], np.sin(self.coord[2]) * self.coord[1]]])
-        
-	        #Get centre of mass
-                com = self.masses.dot(pos)/np.sum(self.masses)
-        
-	        #Translate to centre of mass (for animation)
-                pos = pos - com
-
                 # Update records
-                self.positions.append(pos)
                 self.trajectory.append(np.column_stack((self.coord,self.mom)))
                 self.energies.append([V,K])
         
@@ -497,7 +475,6 @@ class Interactive():
                 break
 
         # convert to arrays
-        self.positions=np.array(self.positions)
         self.trajectory=np.array(self.trajectory)
         # repeat last element of energies at the end just to make the length consistent
         self.energies.append(self.energies[-1])
@@ -515,7 +492,7 @@ class Interactive():
         self.entries["prabi"][0].insert(0, self.trajectory[-1,0,1])
         
         self.entries["prbci"][0].delete(0, tk.END)
-        self.entries["prbci"][0].insert(0, self.trajectory[-1.1,1])
+        self.entries["prbci"][0].insert(0, self.trajectory[-1,1,1])
             
     def export(self, *args):
         """Run calculation and print output in CSV format"""
@@ -815,6 +792,20 @@ class Interactive():
         plt.close('all')
         self.ani_fig = plt.figure('Animation', figsize=(5,5))
         
+        #Positions in space of A, B and C relative to B
+        frames = len(self.trajectory)
+        positions = np.column_stack((- self.trajectory[:,0,0], np.zeros(frames),
+                                     np.zeros(frames), np.zeros(frames),
+                                     - np.cos(self.trajectory[:,2,0]) * self.trajectory[:,1,0],
+                                     np.sin(self.trajectory[:,2,0]) * self.trajectory[:,1,0]))
+        positions = np.reshape(positions,(frames,3,2))
+        
+	#Get centre of mass
+        com = self.masses.dot(positions[:])/np.sum(self.masses)
+        
+	#Translate to centre of mass (there might be a way to do this only with array operations)
+        positions = positions - np.reshape(np.column_stack((com,com,com)),(frames,3,2))
+
         def init():
             ap, bp, cp = patches
             ax.add_patch(ap)
@@ -824,14 +815,14 @@ class Interactive():
             
         def update(i):
             ap, bp, cp = patches
-            ap.center = self.positions[i,0]
-            bp.center = self.positions[i,1]
-            cp.center = self.positions[i,2]
+            ap.center = positions[i,0]
+            bp.center = positions[i,1]
+            cp.center = positions[i,2]
             return ap, bp, cp,
             
         ax = plt.axes(
-        xlim = (min(self.positions[:,0], key=lambda x: x[0])[0] - 1, max(self.positions[:,2], key=lambda x: x[0])[0] + 1),
-        ylim = (min(self.positions[:,0], key=lambda x: x[1])[1] - 1, max(self.positions[:,2], key=lambda x: x[1])[1] + 1)
+        xlim = (min(np.ravel(positions[:,:,0])) - 1, max(np.ravel(positions[:,:,0])) + 1),
+        ylim = (min(np.ravel(positions[:,:,1])) - 1, max(np.ravel(positions[:,:,1])) + 1)
         )
         ax.set_aspect('equal')
             
@@ -840,10 +831,10 @@ class Interactive():
         for i,at_name in enumerate(["a", "b", "c"]):
             at = self.entries[at_name][0].get()
             vdw, col = self.atom_map[at]
-            patch = plt.Circle(self.positions[0,i], vdw * 0.25, color = col)
+            patch = plt.Circle(positions[0,i], vdw * 0.25, color = col)
             patches.append(patch)
         
-        self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(self.positions), repeat=True, interval=20)
+        self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(positions), repeat=True, interval=20)
         
         try:
             plt.show()
