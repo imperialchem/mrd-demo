@@ -23,7 +23,7 @@
 # as well and the gradient and hessian of the surface with respect to the internal
 # coordinates at that point of the surface.
 
-
+from numba import jit
 import numpy as np
 
 # Check consistency with H parameter used
@@ -31,7 +31,7 @@ k = 0.18 # In TRIATOMICS this is 0.18 but should be Sato parameter?
 #this state variable looks strange
 state = 1 # 1 for ground state, >1 for excited states
 
-
+@jit(signature_or_function="float64(float64, float64, float64)", nopython=True)
 def cos_rule(side1,side2,angle):
     '''
     Use the cos rule to calculate the length of the side of a triangle,
@@ -40,44 +40,44 @@ def cos_rule(side1,side2,angle):
 
     return  (side1**2 + side2**2 - 2*side1*side2*np.cos(angle))**0.5
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64[:], float64[:])", nopython=True)
 def _morse(r,D,B,re):
     '''Morse potential with a dissociation limit at 0.'''
 
     return D*(np.exp(-2*B*(r-re)) - 2*np.exp(-B*(r-re)))
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64[:], float64[:])", nopython=True)
 def _morse_deriv1(r,D,B,re):
     '''First derivative of the Morse potential with respect to r.'''
 
     return -2*B*D*(np.exp(-2*B*(r-re)) - np.exp(-B*(r-re)))
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64[:], float64[:])", nopython=True)
 def _morse_deriv2(r,D,B,re):
     '''Second derivative of the Morse potential with respect to r.'''
 
     return 2 * B**2 * D*(2*np.exp(-2*B*(r-re)) - np.exp(-B*(r-re)))
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64[:], float64[:])", nopython=True)
 def _anti_morse(r,D,B,re):
     '''Potential with functional form similar to Morse, used as the triplet
     component of the LEPS potential.'''
 
     return 0.5*D*(np.exp(-2*B*(r-re)) + 2*np.exp(-B*(r-re))) 
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64[:], float64[:])", nopython=True)
 def _anti_morse_deriv1(r,D,B,re):
     '''First derivative of the anti-Morse potential with respect to r.'''
 
     return -B*D*(np.exp(-2*B*(r-re)) + np.exp(-B*(r-re)))
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64[:], float64[:])", nopython=True)
 def _anti_morse_deriv2(r,D,B,re):
     '''Second derivative of the anti-Morse potential with respect to r.'''
 
     return B**2 * D*(2*np.exp(-2*B*(r-re)) + np.exp(-B*(r-re)))
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64)", nopython=True)
 def _coulomb(morse,anti_morse,k):
     '''Calculate Coulomb (Q) integral in the LEPS approximation.
     The function is also used to compute the derivatives of Q since it is linear
@@ -85,7 +85,7 @@ def _coulomb(morse,anti_morse,k):
 
     return 0.5*(morse + anti_morse + k*(morse - anti_morse))
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:], float64)", nopython=True)
 def _exchange(morse,anti_morse,k):
     '''Calculate Exchange (J) integral in the LEPS approximation.
     The function is also used to compute the derivatives of J since it is linear
@@ -93,7 +93,11 @@ def _exchange(morse,anti_morse,k):
 
     return 0.5*(morse - anti_morse + k*(morse + anti_morse))
 
+@jit(signature_or_function="float64[:](float64[:])")
+def _j_diff(J):
+       return np.array([J[0] - J[1], J[1] - J[2], J[2] - J[0]])
 
+@jit(signature_or_function="float64(float64[:], float64[:,:], float64)", nopython=True)
 def leps_energy(int_coord,params,H):
     '''Calculate LEPS potential energy for a given point in internal coordinates
        int_coord=array([rAB,rBC,theta])
@@ -102,7 +106,8 @@ def leps_energy(int_coord,params,H):
                      [D_C,B_C,re_C]]).'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
+    r = np.copy(int_coord)
+    r[2] = cos_rule(int_coord[0], int_coord[1], int_coord[2])
  
    #Coulomb and Exchange integrals
     Q=_coulomb(_morse(r,params[:,0],params[:,1],params[:,2]),
@@ -110,9 +115,9 @@ def leps_energy(int_coord,params,H):
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
                 _anti_morse(r,params[:,0],params[:,1],params[:,2]),k)
    
-    return 1/(1+H**2) * (np.sum(Q) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1)))
+    return 1/(1+H**2) * (np.sum(Q) - state/2**0.5 *np.linalg.norm(_j_diff(J)))
 
-
+@jit(signature_or_function="float64[:](float64[:], float64[:,:], float64)", nopython=True)
 def leps_gradient(int_coord,params,H):
     '''Calculates the gradient of LEPS potential for a given point in internal coordinates
        int_coord=array([rAB,rBC,theta])
@@ -123,7 +128,8 @@ def leps_gradient(int_coord,params,H):
        grad=array([dV/drAB,dV/drBC,dV/dtheta]).'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
+    r = np.copy(int_coord)
+    r[2] = cos_rule(int_coord[0], int_coord[1], int_coord[2])
 
     #Exchange integrals (Coulomb not needed)
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
@@ -147,7 +153,7 @@ def leps_gradient(int_coord,params,H):
                     
     #Calculate derivative of the Exchange part of the potential with respect to the internal coordinates.
     #Only J_AC depends on theta
-    Jdiff = J - np.roll(J,-1)
+    Jdiff = _j_diff(J)
  
     Jpart_grad_rAB=np.sum(Jdiff*(np.array([1,0,-1])*partial_J_r[0]+np.array([0,-1,1])*partial_J_r[2]*drACdint[0]))
     Jpart_grad_rBC=np.sum(Jdiff*(np.array([-1,1,0])*partial_J_r[1]+np.array([0,-1,1])*partial_J_r[2]*drACdint[1]))
@@ -157,7 +163,7 @@ def leps_gradient(int_coord,params,H):
     
     return 1/(1+H**2) * (Qpart_grad_int + Jpart_grad_int)
 
-
+@jit(signature_or_function="float64[:,:](float64[:], float64[:,:], float64)", nopython=True)
 def leps_hessian(int_coord,params,H):
     '''Calculates the Hessian of LEPS potential for a given point in internal coordinates
        int_coord=array([rAB,rBC,theta])
@@ -167,7 +173,8 @@ def leps_hessian(int_coord,params,H):
        The gradient is given in internal coordinates,'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
+    r = np.copy(int_coord)
+    r[2] = cos_rule(int_coord[0], int_coord[1], int_coord[2])
 
     #Exchange integrals (Coulomb not needed)
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
@@ -203,8 +210,8 @@ def leps_hessian(int_coord,params,H):
                    partial2_Q_r[2] * (drACdint * np.expand_dims(drACdint, axis=1)) #this last line is using broadcasting of 2 vectors to give a matrix
 
     #Calculate Exchange contribution to the Hessian
-    #Devide into 2 parts.
-    Jdiff = J - np.roll(J,-1)
+    #Divide into 2 parts.
+    Jdiff = _j_diff(J)
     Jdiff_norm= np.linalg.norm(Jdiff)
 
     Jpart1_hess_drAB2=np.sum(Jdiff*(np.array([1,0,-1])*partial_J_r[0]+np.array([0,-1,1])*partial_J_r[2]*drACdint[0]))**2
@@ -241,3 +248,16 @@ def leps_hessian(int_coord,params,H):
 
     return 1/(1+H**2)*(Qpart_hess_int + (-state/2**0.5 * (Jpart1_hess_int+Jpart2_hess_int)))
 
+@jit(signature_or_function="float64[:,:](float64[:], float64[:], float64, float64[:,:], float64)", nopython=True)
+def get_Vmat(xs, ys, theta, morse_params, H):
+
+    Vmat = np.zeros((len(xs), len(ys)))
+    int_coord = np.zeros((3))
+    for ix, x in enumerate(xs):
+       int_coord[0] = x
+       for iy, y in enumerate(ys):
+           int_coord[1] = y
+           int_coord[2] = theta
+           Vmat[ix, iy] = leps_energy(int_coord, morse_params, H)
+
+    return Vmat

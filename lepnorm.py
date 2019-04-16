@@ -18,8 +18,10 @@
 #    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
 
 
+from numba import jit
 import numpy as np
 
+@jit(signature_or_function="float64(float64[:], float64[:], float64[:], float64[:], float64[:,:], float64, boolean)", nopython=True)
 def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
     '''
     Updates coordinates and momenta by a time step (or an arbitraty step in the
@@ -60,7 +62,7 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
 
     # G-Matrix Weighted Hessian;
     mwhessian = GRR.dot(hessian).dot(GRR)
-    w2, transf = np.linalg.eig(mwhessian); #transf is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
+    w2, transf = np.linalg.eig(mwhessian) #transf is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
     
     # Gradient Vector in mass-weighted normal modes
     gradN = transf.T.dot(GRR).dot(gradient)
@@ -95,11 +97,12 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
                 momN[i] = momN[i] * np.cos(wroot*dt) - gradN[i] * np.sin(wroot*dt) / wroot
             
     # update coordinates by first transforming displacementN into internal coordinates
-    coord = coord + GRR.dot(transf).dot(displacementN) 
+    coord += GRR.dot(transf).dot(displacementN) 
     
     # transform updated momentum back into internal coordinates
-    mom = GROOT.dot(transf).dot(momN)
-        
-    ktot = 0.5 * np.linalg.norm(momN)**2 # convenient way to calculate kinetic energy
+    mom[0:3] = GROOT.dot(transf).dot(momN)
     
-    return (coord,mom,ktot)
+        
+    ktot = 0.5 * np.dot(momN, momN) # convenient way to calculate kinetic energy
+    
+    return ktot

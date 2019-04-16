@@ -19,7 +19,7 @@
 
 
 from params import params
-from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
+from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule,get_Vmat
 from lepnorm import lepnorm
 
 import numpy as np
@@ -94,7 +94,7 @@ class Interactive():
             "cutoff"   : ["-20"         , float, None                         ],
             "spacing"  : ["5"           , int  , None                         ],
             "calc_type": ["Dynamics"    , str  , None                         ],
-            "theta"    : ["180"         , float, None                         ],
+            "theta"    : ["180"         , float, lambda x: np.deg2rad(x)      ],
             "plot_type": ["Contour Plot", str  , None                         ]
         }
         
@@ -381,15 +381,7 @@ class Interactive():
         self.x = np.arange(self.plot_limits[0,0],self.plot_limits[0,1],resl)
         self.y = np.arange(self.plot_limits[1,0],self.plot_limits[1,1],resl)
 
-        self.Vmat = np.zeros((len(self.y), len(self.x)))
-        
-        #Calculate potential for each gridpoint
-        for drabcount, drab in enumerate(self.x):
-            for drbccount, drbc in enumerate(self.y):
-    
-                V = leps_energy(np.array([drab,drbc,np.deg2rad(self.theta)]),
-                   self.morse_params,self.H)
-                self.Vmat[drbccount, drabcount] = V
+        self.Vmat = get_Vmat(self.x, self.y, self.theta, self.morse_params, self.H)
 
         self.old_params = new_params
                         
@@ -397,7 +389,7 @@ class Interactive():
         """Get dynamics, MEP or optimisation"""
         
         # Set initial coordinates
-        self.coord=np.array([self.xrabi,self.xrbci,np.deg2rad(self.theta)])
+        self.coord=np.array([self.xrabi,self.xrbci,self.theta])
 
         if self.calc_type == "Dynamics":
             # Set initial momenta (theta component = 0)
@@ -455,7 +447,7 @@ class Interactive():
             else: #Dynamics/MEP
 
                 try:
-                    self.coord,self.mom,K = lepnorm(self.coord,self.mom,self.masses,gradient,hessian,self.dt,self.calc_type == "MEP")
+                    K = lepnorm(self.coord,self.mom,self.masses,gradient,hessian,self.dt,self.calc_type == "MEP")
                 except LinAlgError:
                     msgbox.showerror("Surface Error", "Energy could not be evaulated at step {}. Steps truncated".format(itcounter + 1))
                     terminate = True
@@ -885,7 +877,7 @@ class Interactive():
         self._read_entries()
         self.get_params()
         
-        coord=np.array([self.xrabi,self.xrbci,np.deg2rad(self.theta)])
+        coord=np.array([self.xrabi,self.xrbci,self.theta])
         mom=np.array([self.prabi,self.prbci,0])
 
         V = leps_energy(coord,self.morse_params,self.H)
