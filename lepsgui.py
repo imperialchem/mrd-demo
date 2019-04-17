@@ -94,7 +94,7 @@ class Interactive():
             "cutoff"   : ["-20"         , float, None                         ],
             "spacing"  : ["5"           , int  , None                         ],
             "calc_type": ["Dynamics"    , str  , None                         ],
-            "theta"    : ["180"         , float, None                         ],
+            "theta"    : ["180"         , float, lambda x:np.deg2rad(x)       ],
             "plot_type": ["Contour Plot", str  , None                         ]
         }
         
@@ -190,7 +190,7 @@ class Interactive():
         self._add_entry(steps_frame, "steps", {}, {"row":0, "column":0}, {"width":6})
         
         #Cutoff Frame
-        cutoff_frame = self._add_frame(dict(master=self.root, text="Cutoff (Kcal/mol)", **sunken), gk('310055news'))
+        cutoff_frame = self._add_frame(dict(master=self.root, text="Cutoff (kcal/mol)", **sunken), gk('310055news'))
         self._add_scale(cutoff_frame, "cutoff",{"from_":-100, "to":0, "orient":"horizontal"}, gk('00ew'), {"length":200})
         
         #Contour Spacing Frame
@@ -387,7 +387,7 @@ class Interactive():
         for drabcount, drab in enumerate(self.x):
             for drbccount, drbc in enumerate(self.y):
     
-                V = leps_energy(np.array([drab,drbc,np.deg2rad(self.theta)]),
+                V = leps_energy(np.array([drab,drbc,self.theta]),
                    self.morse_params,self.H)
                 self.Vmat[drbccount, drabcount] = V
 
@@ -397,7 +397,7 @@ class Interactive():
         """Get dynamics, MEP or optimisation"""
         
         # Set initial coordinates
-        self.coord=np.array([self.xrabi,self.xrbci,np.deg2rad(self.theta)])
+        self.coord=np.array([self.xrabi,self.xrbci,self.theta])
 
         if self.calc_type == "Dynamics":
             # Set initial momenta (theta component = 0)
@@ -566,8 +566,8 @@ class Interactive():
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
         ax.get_yaxis().get_major_formatter().set_useOffset(False)
         
-        plt.xlabel("AB Distance")
-        plt.ylabel("BC Distance")
+        plt.xlabel("AB Distance /Å")
+        plt.ylabel("BC Distance /Å")
         
         X, Y = np.meshgrid(self.x, self.y)
         
@@ -603,8 +603,8 @@ class Interactive():
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
         ax.get_yaxis().get_major_formatter().set_useOffset(False)
         
-        plt.xlabel("Q1")
-        plt.ylabel("Q2")
+        plt.xlabel("$Q1 /\\AA.g^{1/2}.mol^{-1/2}$")
+        plt.ylabel("$Q2 /\\AA.g^{1/2}.mol^{-1/2}$")
         
         X, Y = np.meshgrid(self.x, self.y)
         
@@ -668,8 +668,9 @@ class Interactive():
         
         ax = Axes3D(self.fig_3d)
         
-        plt.xlabel("AB Distance")
-        plt.ylabel("BC Distance")
+        plt.xlabel("AB Distance /Å")
+        plt.ylabel("BC Distance /Å")
+        ax.set_zlabel("$V /kcal.mol^{-1}$")
         
         X, Y = np.meshgrid(self.x, self.y)
         ax.set_xlim3d([min(self.x),max(self.x)])
@@ -692,15 +693,19 @@ class Interactive():
         ax = plt.gca()
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
         ax.get_yaxis().get_major_formatter().set_useOffset(False)
-        
-        plt.xlabel("Time")
-        plt.ylabel("Distance")
-       
-        time=self.dt*np.arange(len(self.trajectory))        
+              
+        if self.calc_type == "Dynamics": 
+            xaxis=self.dt*np.arange(len(self.trajectory))
+            plt.xlabel("Time")
+        else:
+            xaxis=np.arange(len(self.trajectory))
+            plt.xlabel("Steps")
  
-        ab, = plt.plot(time, self.trajectory[:,0,0], label = "A-B")
-        bc, = plt.plot(time, self.trajectory[:,1,0], label = "B-C")
-        ac, = plt.plot(time, cos_rule(self.trajectory[:,0,0],self.trajectory[:,1,0],self.trajectory[:,2,0]), label = "A-C")
+        plt.ylabel("Distance /Å")
+
+        ab, = plt.plot(xaxis, self.trajectory[:,0,0], label = "A-B")
+        bc, = plt.plot(xaxis, self.trajectory[:,1,0], label = "B-C")
+        ac, = plt.plot(xaxis, cos_rule(self.trajectory[:,0,0],self.trajectory[:,1,0],self.trajectory[:,2,0]), label = "A-C")
         
         plt.legend(handles=[ab, bc, ac])
         
@@ -713,8 +718,14 @@ class Interactive():
         ax = plt.gca()
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
         ax.get_yaxis().get_major_formatter().set_useOffset(False)
-        
-        plt.xlabel("Time")
+ 
+        if self.calc_type == "Dynamics": 
+            xaxis=self.dt*np.arange(len(self.trajectory))
+            plt.xlabel("Time")
+        else:
+            xaxis=np.arange(len(self.trajectory))
+            plt.xlabel("Steps")
+ 
         plt.ylabel("Momentum")
 
         time=self.dt*np.arange(len(self.trajectory))        
@@ -727,9 +738,9 @@ class Interactive():
         # project one velocity onto the other, and check the difference
         sig = (lambda x,y,t: np.sign(x-y*np.cos(t)))(vAB,vBC,self.trajectory[:,1,0])
  
-        ab, = plt.plot(time, self.trajectory[:,0,1], label = "A-B")
-        bc, = plt.plot(time, self.trajectory[:,1,1], label = "B-C")
-        ac, = plt.plot(time, sig*pAC, label = "A-C")
+        ab, = plt.plot(xaxis, self.trajectory[:,0,1], label = "A-B")
+        bc, = plt.plot(xaxis, self.trajectory[:,1,1], label = "B-C")
+        ac, = plt.plot(xaxis, sig*pAC, label = "A-C")
        
         plt.legend(handles=[ab, bc, ac])
         
@@ -772,15 +783,21 @@ class Interactive():
         ax = plt.gca()
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
         ax.get_yaxis().get_major_formatter().set_useOffset(False)
-        
-        plt.xlabel("Time")
+ 
+        if self.calc_type == "Dynamics": 
+            xaxis=self.dt*np.arange(len(self.trajectory))
+            plt.xlabel("Time")
+        else:
+            xaxis=np.arange(len(self.trajectory))
+            plt.xlabel("Steps")
+       
         plt.ylabel("Energy")
 
         time=self.dt*np.arange(len(self.trajectory))
  
-        pot, = plt.plot(time, self.energies[:,0], label = "Potential Energy")
-        kin, = plt.plot(time, self.energies[:,1],  label = "Kinetic Energy")
-        tot, = plt.plot(time, np.sum(self.energies,axis=1),  label = "Total Energy")
+        pot, = plt.plot(xaxis, self.energies[:,0], label = "Potential Energy")
+        kin, = plt.plot(xaxis, self.energies[:,1],  label = "Kinetic Energy")
+        tot, = plt.plot(xaxis, np.sum(self.energies,axis=1),  label = "Total Energy")
         
         plt.legend(handles=[pot, kin, tot])
         
@@ -885,7 +902,7 @@ class Interactive():
         self._read_entries()
         self.get_params()
         
-        coord=np.array([self.xrabi,self.xrbci,np.deg2rad(self.theta)])
+        coord=np.array([self.xrabi,self.xrbci,self.theta])
         mom=np.array([self.prabi,self.prbci,0])
 
         V = leps_energy(coord,self.morse_params,self.H)

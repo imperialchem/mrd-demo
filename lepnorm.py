@@ -60,7 +60,7 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
 
     # G-Matrix Weighted Hessian;
     mwhessian = GRR.dot(hessian).dot(GRR)
-    w2, transf = np.linalg.eig(mwhessian); #transf is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
+    w2, transf = np.linalg.eig(mwhessian) #transf is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
     
     # Gradient Vector in mass-weighted normal modes
     gradN = transf.T.dot(GRR).dot(gradient)
@@ -72,8 +72,12 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
         # enforce zero momentum
         momN = np.zeros(3)
         # effectivelly increase step to compensate absence of inertial term
-        dt = dt * 10
+        dt = dt * 15
     
+    # Calculate kinetic energy
+    # (Calculate before updating momenta as this fits better with running of the rest of the code)
+    ktot = 0.5 * np.dot(momN,momN)
+
     displacementN = np.zeros(3)
 
     epsilon = 1e-15
@@ -99,7 +103,5 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
     
     # transform updated momentum back into internal coordinates
     mom = GROOT.dot(transf).dot(momN)
-        
-    ktot = 0.5 * np.linalg.norm(momN)**2 # convenient way to calculate kinetic energy
-    
+            
     return (coord,mom,ktot)
