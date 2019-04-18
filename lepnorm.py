@@ -20,16 +20,14 @@
 
 import numpy as np
 
-def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
+def lepnorm(coord,mom,masses,gradient,hessian,dt):
     '''
-    Updates coordinates and momenta by a time step (or an arbitraty step in the
-    case of a minimum energy path (MEP)).
+    Updates coordinates and momenta by a time step.
 
     coord, mom, gradient and hessian are all arrays in internal coordinates rAB,
     rBC and theta.
     mass is an array with masses of atoms A, B and C.
     dt is the size of the timestep.
-    MEP is a boolian defining whether the calculation is a MEP.
 
     The function first converts from internal coordinates into mass-weighted
     normal modes, the displacement is calculated in normal modes, and converted
@@ -65,14 +63,8 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
     # Gradient Vector in mass-weighted normal modes
     gradN = transf.T.dot(GRR).dot(gradient)
     
-    if not MEP: 
-        # Momentum Vector in normal modes
-        momN = transf.T.dot(GRR).dot(mom)
-    else:
-        # enforce zero momentum
-        momN = np.zeros(3)
-        # effectivelly increase step to compensate absence of inertial term
-        dt = dt * 15
+    # Momentum Vector in normal modes
+    momN = transf.T.dot(GRR).dot(mom)
     
     # Calculate kinetic energy
     # (Calculate before updating momenta as this fits better with running of the rest of the code)
@@ -86,17 +78,14 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt,MEP):
         if w2[i] < - epsilon: # negative curvature of the potential
             wmod = abs(w2[i]) ** 0.5
             displacementN[i]=momN[i] * np.sinh(wmod*dt) / wmod + gradN[i] * (1 - np.cosh(wmod*dt)) / (wmod**2)
-            if not MEP:
-                momN[i] = momN[i] * np.cosh(wmod*dt) - gradN[i] * np.sinh(wmod*dt) / wmod
+            momN[i] = momN[i] * np.cosh(wmod*dt) - gradN[i] * np.sinh(wmod*dt) / wmod
         elif abs(w2[i]) < epsilon: # no curvature in potential
             displacementN[i] = momN[i] * dt - (0.5 * gradN[i] * (dt ** 2))
-            if not MEP:
-                momN[i] = momN[i] - gradN[i] * dt
+            momN[i] = momN[i] - gradN[i] * dt
         else: # positive curvature of the potential
             wroot =w2[i] ** 0.5 
             displacementN[i]=momN[i] * np.sin(wroot*dt) / wroot - gradN[i] * (1 - np.cos(wroot*dt)) / (wroot**2)
-            if not MEP:
-                momN[i] = momN[i] * np.cos(wroot*dt) - gradN[i] * np.sin(wroot*dt) / wroot
+            momN[i] = momN[i] * np.cos(wroot*dt) - gradN[i] * np.sin(wroot*dt) / wroot
             
     # update coordinates by first transforming displacementN into internal coordinates
     coord = coord + GRR.dot(transf).dot(displacementN) 

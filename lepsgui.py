@@ -73,7 +73,6 @@ class Interactive():
         self.atom_map = atom_map
         
         defaults = config['defaults']
-        self.dt  = float(defaults['dt'])  #Time step in dynamics trajectory
         self.H   = float(defaults['Hparam'])   #Surface parameter
         self.lim = float(defaults['lim']) #Calculation will stop once this distance is exceeded
 
@@ -91,6 +90,7 @@ class Interactive():
             "prabi"    : ["-2.5"        , float, None                         ],
             "prbci"    : ["-1.5"        , float, None                         ],
             "steps"    : ["500"         , int  , lambda x: max(1, x)          ],
+            "dt"       : ["0.002"       , float, lambda x: abs(x)             ],
             "cutoff"   : ["-20"         , float, None                         ],
             "spacing"  : ["5"           , int  , None                         ],
             "calc_type": ["Dynamics"    , str  , None                         ],
@@ -102,7 +102,7 @@ class Interactive():
         for key, l in self.defaults.items():
             val, vtype, procfunc = l
             val = vtype(val)
-            if procfunc: #Check whether processing is needed at all
+            if procfunc: #Check whether processing is needed
                 val = procfunc(val)
             setattr(self, key, val)
         
@@ -187,7 +187,10 @@ class Interactive():
         
         #Steps Frame
         steps_frame = self._add_frame(dict(master=self.root, text="Steps", **sunken), gk('210055news'))
-        self._add_entry(steps_frame, "steps", {}, {"row":0, "column":0}, {"width":6})
+        self._add_label(steps_frame, {"text": "  number"}, gk('00'))
+        self._add_entry(steps_frame, "steps", {}, {"row":0, "column":1}, {"width":6})
+        self._add_label(steps_frame, {"text": "  size"}, gk('02'))
+        self._add_entry(steps_frame, "dt", {}, {"row":0, "column":3}, {"width":6})
         
         #Cutoff Frame
         cutoff_frame = self._add_frame(dict(master=self.root, text="Cutoff (kcal/mol)", **sunken), gk('310055news'))
@@ -360,11 +363,7 @@ class Interactive():
         except Exception:
             msgbox.showerror("Error", "Parameters for this atom combination not available!")
             raise
-        
-        self.reduced_masses = np.array([(self.masses[0]*self.masses[1])/(self.masses[0]+self.masses[1]),
-                                        (self.masses[1]*self.masses[2])/(self.masses[1]+self.masses[2]),
-                                        (self.masses[0]*self.masses[2])/(self.masses[0]+self.masses[2])])
- 
+         
     def get_surface(self):
         """Get Vmat (potential) for a given set of parameters"""
         self.get_params()
@@ -402,9 +401,14 @@ class Interactive():
         if self.calc_type == "Dynamics":
             # Set initial momenta (theta component = 0)
             self.mom=np.array([self.prabi,self.prbci,0])
+            step_size=self.dt
         else:
             # If not dynamics, set momenta to zero
             self.mom=np.zeros(3)
+
+            if self.calc_type == "MEP":
+                # Increase the step size to compensate for absence of inertial term
+                step_size = 15*self.dt 
         
         #Initialise outputs
         self.trajectory = [np.column_stack((self.coord,self.mom))]
@@ -413,8 +417,10 @@ class Interactive():
         #Flag to stop appending to output in case of a crash
         terminate = False        
 
-        for itcounter in range(self.steps):
-            
+        itcounter = 0
+        while itcounter < self.steps and not terminate:
+            itcounter = itcounter+1            
+
             #Get current potential, forces, and Hessian
             V = leps_energy(self.coord,self.morse_params,self.H)
             gradient = leps_gradient(self.coord,self.morse_params,self.H)
@@ -455,25 +461,24 @@ class Interactive():
             else: #Dynamics/MEP
 
                 try:
-                    self.coord,self.mom,K = lepnorm(self.coord,self.mom,self.masses,gradient,hessian,self.dt,self.calc_type == "MEP")
+                    self.coord,self.mom,K = lepnorm(self.coord,self.mom,self.masses,gradient,hessian,step_size)
                 except LinAlgError:
                     msgbox.showerror("Surface Error", "Energy could not be evaulated at step {}. Steps truncated".format(itcounter + 1))
                     terminate = True
+
+                if self.calc_type=="MEP":
+                    # reset momenta to zero if doing a MEP
+                    self.mom=np.zeros(3)
                 
             if self.coord[0] > self.lim or self.coord[1] > self.lim: #Stop calc if distance lim is exceeded
                 msgbox.showerror("Surface Error", "Surface Limits exceeded at step {}. Steps truncated".format(itcounter + 1))
                 terminate = True
                     
-                 
-            if itcounter != self.steps - 1 and not terminate:
-                
+            if not terminate:
                 # Update records
                 self.trajectory.append(np.column_stack((self.coord,self.mom)))
                 self.energies.append([V,K])
         
-            if terminate:
-                break
-
         # convert to arrays
         self.trajectory=np.array(self.trajectory)
         # repeat last element of energies at the end just to make the length consistent
@@ -759,6 +764,11 @@ class Interactive():
         
     def plot_velocities(self):
         """AB Velocity VS BC Velocity"""
+ 
+        self.reduced_masses = np.array([(self.masses[0]*self.masses[1])/(self.masses[0]+self.masses[1]),
+                                        (self.masses[1]*self.masses[2])/(self.masses[1]+self.masses[2]),
+                                        (self.masses[0]*self.masses[2])/(self.masses[0]+self.masses[2])])
+      
         plt.clf()
         ax = plt.gca()
         
@@ -904,7 +914,7 @@ class Interactive():
         gradient = leps_gradient(coord,self.morse_params,self.H)
         hessian = leps_hessian(coord,self.morse_params,self.H)
         # Call lepnorm just to get the kinetic energy
-        K = lepnorm(coord,mom,self.masses,gradient,hessian,self.dt,False)[-1]
+        K = lepnorm(coord,mom,self.masses,gradient,hessian,self.dt)[-1]
         
         return V,gradient,hessian,K
         
