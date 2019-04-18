@@ -178,10 +178,10 @@ class Interactive():
         
         if advanced:
             plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
-                "Internuclear Momenta vs Time", "Energy vs Time", "p(AB) vs p(BC)", "v(AB) vs v(BC)", "Animation"]     
+                "Momenta vs Time", "Energy vs Time", "p(AB) vs p(BC)", "v(AB) vs v(BC)", "Animation"]     
         else:
             plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
-                "Internuclear Momenta vs Time", "Energy vs Time", "Animation"]     
+                "Momenta vs Time", "Energy vs Time", "Animation"]     
         
         self._add_optionmenu(type_frame, "plot_type", plot_types , {}, gk('00'), {"width":20})
         
@@ -495,33 +495,18 @@ class Interactive():
         if not filename:
             return
             
-        sources = [
-            ["Time",            self.dt*np.arange(len(self.trajectory))],
-            ["AB Distance",     self.trajectory[:,0,0]                 ],
-            ["BC Distance",     self.trajectory[:,1,0]                 ],
-            ["theta",           self.trajectory[:,2,0]                 ],
-            ["AB Momentum",     self.trajectory[:,0,1]                 ],
-            ["BC Momentum",     self.trajectory[:,1,1]                 ],
-            ["theta Momentum",  self.trajectory[:,2,1]                 ],
-            ["Total Potential", self.energies[:,0]                     ],
-            ["Total Kinetic",   self.energies[:,1]                     ],
-            ["Total Energy",    np.sum(self.energies,axis=1)           ],
-        ]
-        
-        out = ",".join([t for t, s in sources]) + "\n"
-        
-        for step in range(len(self.t)):
-            data = []
-            for t, s in sources:
-                try:
-                    point = str(s[step])
-                except:
-                    point = ""
-                data.append(point)
-            out += ",".join(data) + "\n"
-        
-        with open(filename, "w") as f:
-            f.write(out)
+        if self.calc_type == "Dynamics":
+            header1="Time"
+            first_column=self.dt*np.arange(len(self.trajectory))
+        else:
+            header1="Step"
+            first_column=np.arange(len(self.trajectory))
+
+        line1=header1+",AB distance,AB momentum,BC distance,BC momentum,theta,theta momentum,V energy,K energy,Tot energy"
+        data=np.column_stack((first_column,np.reshape(self.trajectory,(len(self.trajectory),6))
+                              ,self.energies,np.sum(self.energies,axis=1)))
+
+        np.savetxt(filename,data,delimiter=',',header=line1)
             
     def update_plot(self, *args):
         """Generate plot based on what type has been selected"""
@@ -540,7 +525,7 @@ class Interactive():
             self.plot_init_pos()
         elif self.plot_type == "Internuclear Distances vs Time":
             self.plot_ind_vs_t()
-        elif self.plot_type == "Internuclear Momenta vs Time":
+        elif self.plot_type == "Momenta vs Time":
             self.plot_inm_vs_t()
         elif self.plot_type == "Energy vs Time":
             self.plot_e_vs_t()
@@ -567,10 +552,16 @@ class Interactive():
         plt.contour(X, Y, self.Vmat, levels = levels)
         plt.xlim([min(self.x),max(self.x)])
         plt.ylim([min(self.y),max(self.y)])
-        
-        lc = colorline(self.trajectory[:,0,0], self.trajectory[:,1,0], cmap = plt.get_cmap("jet"), linewidth=1)
-        
-        ax.add_collection(lc)
+      
+        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-8:
+            lc = colorline(self.trajectory[:,0,0], self.trajectory[:,1,0], cmap = plt.get_cmap("jet"), linewidth=1)
+            ax.add_collection(lc)
+        else:
+            msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
+               Likely the initial collision angle is not 180°. \
+               Potential energy surfaces will change with time: surface at time 0 shown. \
+               The trajectory is not drawn in this plot.")
+
         plt.draw()
         plt.pause(0.0001) #This stops MPL from blocking
             
@@ -639,16 +630,21 @@ class Interactive():
         plt.contour(Q1, Q2, self.Vmat, levels = levels)
         plt.autoscale()
         plt.axes().set_aspect('equal')
+
+        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-8:
+            #Plot transformed trajectory
+            srab = a * self.trajectory[:,0,0] + b * self.trajectory[:,1,0] * np.cos(beta)
+            srbc = b * self.trajectory[:,1,0] * np.sin(beta)
         
-        #Plot transformed trajectory
-        srab = a * self.trajectory[:,0,0] + b * self.trajectory[:,1,0] * np.cos(beta)
-        srbc = b * self.trajectory[:,1,0] * np.sin(beta)
+            lc = colorline(srab, srbc, cmap = plt.get_cmap("jet"), linewidth=2)
         
-        lc = colorline(srab, srbc, cmap = plt.get_cmap("jet"), linewidth=2)
-        
-        ax.add_collection(lc)
-        
-            
+            ax.add_collection(lc)
+        else:
+            msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
+               Likely the initial collision angle is not 180°. \
+               Potential energy surfaces will change with time: surface at time 0 shown. \
+               The trajectory is not drawn in this plot.")
+       
         plt.draw()
         plt.pause(0.0001)
         
@@ -674,7 +670,14 @@ class Interactive():
 
         levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
         ax.contour(X, Y, Z, zdir='z', levels=levels, offset=ax.get_zlim()[0]-1)
-        ax.plot(self.trajectory[:,0,0], self.trajectory[:,1,0], self.energies[:,0], color='black', linestyle='none', marker='o', markersize=2)
+
+        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-8:
+            ax.plot(self.trajectory[:,0,0], self.trajectory[:,1,0], self.energies[:,0], color='black', linestyle='none', marker='o', markersize=2)
+        else:
+            msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
+               Likely the initial collision angle is not 180°. \
+               Potential energy surfaces will change with time: surface at time 0 shown. \
+               The trajectory is not drawn in this plot.")
          
         plt.draw()
         plt.pause(0.0001)
@@ -705,7 +708,7 @@ class Interactive():
         plt.pause(0.0001)
         
     def plot_inm_vs_t(self):
-        """Internuclear Momenta VS Time"""
+        """Momenta VS Time"""
         plt.clf()
         ax = plt.gca()
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
@@ -722,17 +725,9 @@ class Interactive():
 
         time=self.dt*np.arange(len(self.trajectory))        
 
-        # cos rule of the velocities should give the right magnitude, but sign needs to be checked
-        vAB=self.trajectory[:,0,1]/self.reduced_masses[0]
-        vBC=self.trajectory[:,1,1]/self.reduced_masses[1]
-        pAC=cos_rule(vAB,vBC,self.trajectory[:,1,0])*self.reduced_masses[2]
-
-        # project one velocity onto the other, and check the difference
-        sig = (lambda x,y,t: np.sign(x-y*np.cos(t)))(vAB,vBC,self.trajectory[:,1,0])
- 
         ab, = plt.plot(xaxis, self.trajectory[:,0,1], label = "A-B")
         bc, = plt.plot(xaxis, self.trajectory[:,1,1], label = "B-C")
-        ac, = plt.plot(xaxis, sig*pAC, label = "A-C")
+        ac, = plt.plot(xaxis, self.trajectory[:,2,1], label = "θ")
        
         plt.legend(handles=[ab, bc, ac])
         
