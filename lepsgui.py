@@ -90,7 +90,7 @@ class Interactive():
             "prabi"    : ["-2.5"        , float, None                         ],
             "prbci"    : ["-1.5"        , float, None                         ],
             "steps"    : ["500"         , int  , lambda x: max(1, x)          ],
-            "dt"       : ["0.002"       , float, lambda x: abs(x)             ],
+            "dt"       : ["0.002"       , float, lambda x: max(1e-7,x)        ],
             "cutoff"   : ["-20"         , float, None                         ],
             "spacing"  : ["5"           , int  , None                         ],
             "calc_type": ["Dynamics"    , str  , None                         ],
@@ -365,7 +365,7 @@ class Interactive():
             raise
          
     def get_surface(self):
-        """Get Vmat (potential) for a given set of parameters"""
+        """Get the full potential energy surface (Vmat) at specified grid points or rAB and rBC."""
         self.get_params()
         
         #Check if params have changed. If not, no need to recalculate
@@ -380,15 +380,9 @@ class Interactive():
         self.x = np.arange(self.plot_limits[0,0],self.plot_limits[0,1],resl)
         self.y = np.arange(self.plot_limits[1,0],self.plot_limits[1,1],resl)
 
-        self.Vmat = np.zeros((len(self.y), len(self.x)))
-        
-        #Calculate potential for each gridpoint
-        for drabcount, drab in enumerate(self.x):
-            for drbccount, drbc in enumerate(self.y):
-    
-                V = leps_energy(np.array([drab,drbc,self.theta]),
-                   self.morse_params,self.H)
-                self.Vmat[drbccount, drabcount] = V
+        X,Y=np.meshgrid(self.x,self.y)
+
+        self.Vmat=leps_energy(X,Y,self.theta,self.morse_params,self.H)
 
         self.old_params = new_params
                         
@@ -421,10 +415,10 @@ class Interactive():
         while itcounter < self.steps and not terminate:
             itcounter = itcounter+1            
 
-            #Get current potential, forces, and Hessian
-            V = leps_energy(self.coord,self.morse_params,self.H)
-            gradient = leps_gradient(self.coord,self.morse_params,self.H)
-            hessian = leps_hessian(self.coord,self.morse_params,self.H)
+            #Get current potential, gradient, and Hessian
+            V = leps_energy(*self.coord,self.morse_params,self.H)
+            gradient = leps_gradient(*self.coord,self.morse_params,self.H)
+            hessian = leps_hessian(*self.coord,self.morse_params,self.H)
 
             if self.calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
                 
@@ -910,9 +904,9 @@ class Interactive():
         coord=np.array([self.xrabi,self.xrbci,self.theta])
         mom=np.array([self.prabi,self.prbci,0])
 
-        V = leps_energy(coord,self.morse_params,self.H)
-        gradient = leps_gradient(coord,self.morse_params,self.H)
-        hessian = leps_hessian(coord,self.morse_params,self.H)
+        V = leps_energy(*coord,self.morse_params,self.H)
+        gradient = leps_gradient(*coord,self.morse_params,self.H)
+        hessian = leps_hessian(*coord,self.morse_params,self.H)
         # Call lepnorm just to get the kinetic energy
         K = lepnorm(coord,mom,self.masses,gradient,hessian,self.dt)[-1]
         

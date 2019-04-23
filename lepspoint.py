@@ -94,7 +94,7 @@ def _exchange(morse,anti_morse,k):
     return 0.5*(morse - anti_morse + k*(morse + anti_morse))
 
 
-def leps_energy(int_coord,params,H):
+def leps_energy(rAB,rBC,theta,params,H):
     '''Calculate LEPS potential energy for a given point in internal coordinates
        int_coord=array([rAB,rBC,theta])
        params=array([[D_A,B_A,re_A],
@@ -102,18 +102,20 @@ def leps_energy(int_coord,params,H):
                      [D_C,B_C,re_C]]).'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
+    #moveaxis has no effect for a single point, but allows vectorisation of the function
+    r=np.moveaxis(np.array([rAB,rBC,cos_rule(rAB,rBC,theta)]),0,-1)
  
-   #Coulomb and Exchange integrals
+    #Coulomb and Exchange integrals
     Q=_coulomb(_morse(r,params[:,0],params[:,1],params[:,2]),
                _anti_morse(r,params[:,0],params[:,1],params[:,2]),k)
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
                 _anti_morse(r,params[:,0],params[:,1],params[:,2]),k)
    
-    return 1/(1+H**2) * (np.sum(Q) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1)))
+    #axis=-1 below allows vectorisation of the function
+    return 1/(1+H**2) * (np.sum(Q,axis=-1) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1),axis=-1))
 
 
-def leps_gradient(int_coord,params,H):
+def leps_gradient(rAB,rBC,theta,params,H):
     '''Calculates the gradient of LEPS potential for a given point in internal coordinates
        int_coord=array([rAB,rBC,theta])
        params=array([[D_A,B_A,re_A],
@@ -123,7 +125,7 @@ def leps_gradient(int_coord,params,H):
        grad=array([dV/drAB,dV/drBC,dV/dtheta]).'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
+    r=np.array([rAB,rBC,cos_rule(rAB,rBC,theta)])
 
     #Exchange integrals (Coulomb not needed)
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
@@ -138,7 +140,6 @@ def leps_gradient(int_coord,params,H):
 
     #Note that Q_AC and J_AC depend on rAB and rBC. Calculated eg. dQ_AC/drAB = dQ_AC/drAC * drAC/drAB
     #Make array of the derivative of rAC with respect to the internal coordinate
-    theta=int_coord[2]
     drACdint=np.array([r[0] - r[1]*np.cos(theta),r[1] - r[0]*np.cos(theta),r[0] * r[1]*np.sin(theta)])/r[2]
 
     #Calculate derivative of the Coulombic part of the potential with respect to the internal coordinates.
@@ -158,16 +159,15 @@ def leps_gradient(int_coord,params,H):
     return 1/(1+H**2) * (Qpart_grad_int + Jpart_grad_int)
 
 
-def leps_hessian(int_coord,params,H):
+def leps_hessian(rAB,rBC,theta,params,H):
     '''Calculates the Hessian of LEPS potential for a given point in internal coordinates
-       int_coord=array([rAB,rBC,theta])
        params=array([[D_A,B_A,re_A],
                      [D_B.B_B,re_B],
                      [D_C,B_C,re_C]]).
        The gradient is given in internal coordinates,'''
 
     #Build array with distances rAB,rBC and rAC
-    r=np.array([int_coord[0],int_coord[1],cos_rule(*int_coord)])
+    r=np.array([rAB,rBC,cos_rule(rAB,rBC,theta)])
 
     #Exchange integrals (Coulomb not needed)
     J=_exchange(_morse(r,params[:,0],params[:,1],params[:,2]),
@@ -186,7 +186,6 @@ def leps_hessian(int_coord,params,H):
 
     #Note that Q_AC and J_AC depend on rAB and rBC.
     #Make array of first derivatives of rAC with respect to the internal coordinate
-    theta=int_coord[2]
     drACdint=np.array([r[0] - r[1]*np.cos(theta),r[1] - r[0]*np.cos(theta),r[0] * r[1]*np.sin(theta)])/r[2]
 
     #Make matrix of second derivatives of rAC with respect to the internal coordinate
@@ -203,7 +202,7 @@ def leps_hessian(int_coord,params,H):
                    partial2_Q_r[2] * (drACdint * np.expand_dims(drACdint, axis=1)) #this last line is using broadcasting of 2 vectors to give a matrix
 
     #Calculate Exchange contribution to the Hessian
-    #Devide into 2 parts.
+    #Divide into 2 parts.
     Jdiff = J - np.roll(J,-1)
     Jdiff_norm= np.linalg.norm(Jdiff)
 
