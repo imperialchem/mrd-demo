@@ -112,7 +112,7 @@ def leps_energy(rAB,rBC,theta,params,H):
                 _anti_morse(r,params[:,0],params[:,1],params[:,2]),k)
    
     #axis=-1 below allows vectorisation of the function
-    return 1/(1+H**2) * (np.sum(Q,axis=-1) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1),axis=-1))
+    return 1/(1+H**2) * (np.sum(Q,axis=-1) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1,axis=-1),axis=-1))
 
 
 def leps_gradient(rAB,rBC,theta,params,H):
