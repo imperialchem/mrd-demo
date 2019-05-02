@@ -1,5 +1,3 @@
-#Created on Wed May 17 10:17:56 2017
-#
 #@author: Tristan Mackenzie
 #
 #    This file is part of LepsPy.
@@ -20,7 +18,55 @@
 
 import numpy as np
 
-def lepnorm(coord,mom,masses,gradient,hessian,dt):
+def _gmat(coord,masses):
+    '''Calculate the G-matrix of the system.'''
+    # See E. B. Wildon Jr., J. C. Decius and P. C. Cross "Molecular Vibrations", McGraw-Hill (1955), sec. 4-6
+
+    rAB,rBC,theta = coord
+
+    G12 = np.cos(theta)/masses[1]
+    G13 = -np.sin(theta)/(rBC*masses[1])
+    G23 = -np.sin(theta)/(rAB*masses[1])
+
+    G=np.array([[np.sum(1/masses[0:2]), G12, G13],
+                [G12, np.sum(1/masses[1:3]), G23],
+                [G13, G23,
+                 np.sum(1/(rAB**2 * masses[0:2])) + \
+                  np.sum(1/(rBC**2 * masses[1:3])) - \
+                  2*np.cos(theta)/(rAB*rBC*masses[1]**2)]])
+
+    return G
+
+
+def kinetic_energy(coord,mom,masses):
+    '''
+    Calculate the kineic energy:
+
+    K = 1/2 mom^T G mom
+
+    coord and mom are arrays in internal coordinates.
+    masses is an array with masses of the 3 atoms.
+    '''
+
+    G = _gmat(coord,masses)
+
+    return 0.5 * mom.dot(G).dot(mom)
+
+
+def velocities(coord,mom,masses):
+    '''
+    Calculate velocities in internal coordinates.
+    These don't have a simple relation to momenta.
+    They are calculate from Hamilton's equations by differentiating the kinetic
+    energy with respect to momenta.
+    '''
+
+    G = _gmat(coord,masses)
+
+    return mom.dot(G)
+
+
+def lepsnorm(coord,mom,masses,gradient,hessian,dt):
     '''
     Updates coordinates and momenta by a time step.
 
@@ -34,15 +80,8 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt):
     back to internal coordinates.
     '''
 
-    theta = coord[2]
-
     # G-Matrix
-    # See E. B. Wildon Jr., J. C. Decius and P. C. Cross "Molecular Vibrations", McGraw-Hill (1955), sec. 4-6
-
-    GM=np.array([[np.sum(1/masses[0:2]), np.cos(theta)/masses[1], -np.sin(theta)/(coord[1]*masses[1])],
-                 [np.cos(theta)/masses[1], np.sum(1/masses[1:]), -np.sin(theta)/(coord[0]*masses[1])],
-                 [-np.sin(theta)/(coord[1]*masses[1]), -np.sin(theta)/(coord[0]*masses[1]),
-                   np.sum(1/(coord[0:2]**2 * masses[0:2])) + np.sum(1/(coord[0:2]**2 * masses[1:])) -2*np.cos(theta)/np.prod(coord[0:2]*masses[1])]])
+    GM=_gmat(coord,masses)
     
     GMVal, GMVec = np.linalg.eig(GM)
 
@@ -66,10 +105,6 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt):
     # Momentum Vector in normal modes
     momN = transf.T.dot(GRR).dot(mom)
     
-    # Calculate kinetic energy
-    # (Calculate before updating momenta as this fits better with running of the rest of the code)
-    ktot = 0.5 * np.dot(momN,momN)
-
     displacementN = np.zeros(3)
 
     epsilon = 1e-15
@@ -93,4 +128,4 @@ def lepnorm(coord,mom,masses,gradient,hessian,dt):
     # transform updated momentum back into internal coordinates
     mom = GROOT.dot(transf).dot(momN)
             
-    return (coord,mom,ktot)
+    return (coord,mom)

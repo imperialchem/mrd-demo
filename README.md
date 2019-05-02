@@ -32,11 +32,11 @@ params.ini contains the parameter sets for a number of atom combinations. New at
 
 params.py reads params.ini and passes parameters to the lepsgui.
 
-#### [lepspoint](./lepspoint.py)
+#### [lepspoint.py](./lepspoint.py)
 
 lepspoint calculations the energy, first and second energy derivatives for any point on the surface.
 
-#### [lepnorm.py](./lepnorm.py)
+#### [lepsmove.py](./lepsmove.py)
 
-lepnorm performs the dynamics and MEP steps using the energy, first and second energy derivatives.
+This file contains several functions related to the displacement of the system and its dynamic state.
 

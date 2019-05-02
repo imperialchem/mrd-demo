@@ -20,7 +20,7 @@
 
 from params import params
 from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
-from lepnorm import lepnorm
+from lepsmove import lepsnorm,kinetic_energy,velocities
 
 import numpy as np
 from numpy.linalg.linalg import LinAlgError
@@ -356,8 +356,7 @@ class Interactive():
         self.entries[key] = [radio, vtype, procfunc]
             
     def get_params(self):
-        """This gets parameters for a given set of atoms"""
-        #Params
+        """Gets parameters for a given set of atoms"""
         try:
             self.masses,self.morse_params,self.plot_limits = params(self.a,self.b,self.c)
         except Exception:
@@ -406,7 +405,6 @@ class Interactive():
         
         #Initialise outputs
         self.trajectory = [np.column_stack((self.coord,self.mom))]
-        self.energies = []
 
         #Flag to stop appending to output in case of a crash
         terminate = False        
@@ -415,8 +413,7 @@ class Interactive():
         while itcounter < self.steps and not terminate:
             itcounter = itcounter+1            
 
-            #Get current potential, gradient, and Hessian
-            V = leps_energy(*self.coord,self.morse_params,self.H)
+            #Get current gradient, and Hessian
             gradient = leps_gradient(*self.coord,self.morse_params,self.H)
             hessian = leps_hessian(*self.coord,self.morse_params,self.H)
 
@@ -449,13 +446,10 @@ class Interactive():
                 # update positions
                 self.coord = self.coord + disps
                 
-                # set kinetic energy to zero
-                K=0
-                
             else: #Dynamics/MEP
 
                 try:
-                    self.coord,self.mom,K = lepnorm(self.coord,self.mom,self.masses,gradient,hessian,step_size)
+                    self.coord,self.mom = lepsnorm(self.coord,self.mom,self.masses,gradient,hessian,step_size)
                 except LinAlgError:
                     msgbox.showerror("Surface Error", "Energy could not be evaulated at step {}. Steps truncated".format(itcounter + 1))
                     terminate = True
@@ -471,14 +465,10 @@ class Interactive():
             if not terminate:
                 # Update records
                 self.trajectory.append(np.column_stack((self.coord,self.mom)))
-                self.energies.append([V,K])
         
         # convert to arrays
         self.trajectory=np.array(self.trajectory)
-        # repeat last element of energies at the end just to make the length consistent
-        self.energies.append(self.energies[-1])
-        self.energies=np.array(self.energies)
-        
+ 
     def get_last_geo(self, *args):
         """Copy last geometry and momenta"""
         self.entries["xrabi"][0].delete(0, tk.END)
@@ -510,8 +500,16 @@ class Interactive():
             first_column=np.arange(len(self.trajectory))
 
         line1=header1+",AB distance,AB momentum,BC distance,BC momentum,theta,theta momentum,V energy,K energy,Tot energy"
+
+        # calculate energies
+        V=np.zeros(len(self.trajectory))
+        K=np.zeros(len(self.trajectory))
+        for i,point in enumerate(self.trajectory):
+            V[i]=leps_energy(*point[:,0],self.morse_params,self.H)
+            K[i]=kinetic_energy(point[:,0],point[:,1],self.masses)
+
         data=np.column_stack((first_column,np.reshape(self.trajectory,(len(self.trajectory),6))
-                              ,self.energies,np.sum(self.energies,axis=1)))
+                              ,V,K,V+K))
 
         np.savetxt(filename,data,delimiter=',',header=line1)
             
@@ -679,7 +677,9 @@ class Interactive():
         ax.contour(X, Y, Z, zdir='z', levels=levels, offset=ax.get_zlim()[0]-1)
 
         if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-8:
-            ax.plot(self.trajectory[:,0,0], self.trajectory[:,1,0], self.energies[:,0], color='black', linestyle='none', marker='o', markersize=2)
+            ax.plot(self.trajectory[:,0,0], self.trajectory[:,1,0],
+                    leps_energy(self.trajectory[:,0,0],self.trajectory[:,1,0],self.trajectory[:,2,0],self.morse_params,self.H),
+                    color='black', linestyle='none', marker='o', markersize=2)
         else:
             msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
                Likely the initial collision angle is not 180°. \
@@ -759,9 +759,11 @@ class Interactive():
     def plot_velocities(self):
         """AB Velocity VS BC Velocity"""
  
-        self.reduced_masses = np.array([(self.masses[0]*self.masses[1])/(self.masses[0]+self.masses[1]),
-                                        (self.masses[1]*self.masses[2])/(self.masses[1]+self.masses[2]),
-                                        (self.masses[0]*self.masses[2])/(self.masses[0]+self.masses[2])])
+        # calculate velocities in internal coordinates
+        veloc=[]
+        for point in self.trajectory:
+            veloc.append(velocities(point[:,0],point[:,1],self.masses))
+        veloc=np.array(veloc)
       
         plt.clf()
         ax = plt.gca()
@@ -769,7 +771,7 @@ class Interactive():
         plt.xlabel("AB Velocity")
         plt.ylabel("BC Velocity")
         
-        lc = colorline(self.trajectory[:,0,1]/self.reduced_masses[0], self.trajectory[:,1,1]/self.reduced_masses[1], cmap = plt.get_cmap("jet"), linewidth=1)
+        lc = colorline(veloc[:,0], veloc[:,1], cmap = plt.get_cmap("jet"), linewidth=1)
         
         ax.add_collection(lc)
         ax.autoscale()
@@ -793,10 +795,17 @@ class Interactive():
         plt.ylabel("Energy")
 
         time=self.dt*np.arange(len(self.trajectory))
- 
-        pot, = plt.plot(xaxis, self.energies[:,0], label = "Potential Energy")
-        kin, = plt.plot(xaxis, self.energies[:,1],  label = "Kinetic Energy")
-        tot, = plt.plot(xaxis, np.sum(self.energies,axis=1),  label = "Total Energy")
+
+        # calculate energies
+        V=np.zeros(len(self.trajectory))
+        K=np.zeros(len(self.trajectory))
+        for i,point in enumerate(self.trajectory):
+            V[i]=leps_energy(*point[:,0],self.morse_params,self.H)
+            K[i]=kinetic_energy(point[:,0],point[:,1],self.masses)
+
+        pot, = plt.plot(xaxis, V, label = "Potential Energy")
+        kin, = plt.plot(xaxis, K, label = "Kinetic Energy")
+        tot, = plt.plot(xaxis, V+K, label = "Total Energy")
         
         plt.legend(handles=[pot, kin, tot])
         
@@ -850,7 +859,7 @@ class Interactive():
             patch = plt.Circle(positions[0,i], vdw * 0.25, color = col)
             patches.append(patch)
         
-        self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(positions), repeat=True, interval=20)
+        self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(positions), repeat=True, interval=10)
         
         try:
             plt.show()
@@ -907,10 +916,9 @@ class Interactive():
         V = leps_energy(*coord,self.morse_params,self.H)
         gradient = leps_gradient(*coord,self.morse_params,self.H)
         hessian = leps_hessian(*coord,self.morse_params,self.H)
-        # Call lepnorm just to get the kinetic energy
-        K = lepnorm(coord,mom,self.masses,gradient,hessian,self.dt)[-1]
+        K = kinetic_energy(coord,mom,self.masses)
         
-        return V,gradient,hessian,K
+        return (V,gradient,hessian,K)
         
     def update_geometry_info(self, *args):
         """Updates the info pane"""
