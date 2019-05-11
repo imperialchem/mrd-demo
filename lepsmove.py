@@ -17,6 +17,9 @@
 
 
 import numpy as np
+from numpy.linalg.linalg import LinAlgError
+from lepspoint import leps_gradient,leps_hessian
+
 
 def _gmat(coord,masses):
     '''Calculate the G-matrix of the system.'''
@@ -152,3 +155,88 @@ def lepsnorm(coord,mom,masses,gradient,hessian,dt):
     mom = GROOT.dot(transf).dot(momN)
             
     return (coord,mom)
+
+
+def calc_trajectory(coord_init,mom_init,masses,morse_params,H_param,steps,dt,calc_type):
+    '''
+    Make the system move. This may be the calculation of a inertial trajectory
+    (calc_type="Dynamics"), a minimum energy path (calc_type="MEP"), a local
+    monimum or transitions state search (calc_type="Opt Min" or calc_type="Opt TS").
+
+    The function outputs a trajectory array with position and momenta, and a string
+    which may contain an error message.
+    '''
+    
+    # Rewrite inputs to avoid side effects
+    coord=coord_init
+    mom=mom_init
+    step_size=dt
+
+    # If doing an MEP, set initial momenta to zero and increase step size to compensate
+    # absence of inertial term
+    if calc_type == "MEP":
+        mom=np.zeros(3)
+        step_size = 15*dt 
+    
+    #Initialise outputs
+    trajectory = [np.column_stack((coord,mom))]
+    error = ""
+
+    #Flag to stop appending to output in case of a crash
+    terminate = False        
+
+    itcounter = 0
+    while itcounter < steps and not terminate:
+        itcounter = itcounter+1            
+
+        #Get current gradient, and Hessian
+        gradient = leps_gradient(*coord,morse_params,H_param)
+        hessian = leps_hessian(*coord,morse_params,H_param)
+
+        if calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
+            
+            #Diagonalise Hessian
+            eigenvalues, eigenvectors = np.linalg.eig(hessian)
+            
+            #Eigenvalue test
+            neg_eig_i = [i for i,eig in enumerate(eigenvalues) if eig < -0.01]
+            if len(neg_eig_i) == 0 and self.calc_type == "Opt TS":
+                error="Eigenvalues Info::No negative curvatures at this geometry"
+                terminate = True
+            elif len(neg_eig_i) > 1 and self.calc_type == "Opt Min":
+                error="Eigenvalues Error::Too many negative curvatures at this geometry"
+                terminate = True                    
+            elif len(neg_eig_i) > 1:
+                error="Eigenvalues Error::Too many negative curvatures at this geometry"
+                terminate = True
+            
+            #Optimiser
+            disps = np.zeros(3)
+            for mode in range(len(eigenvalues)):
+                e_val = eigenvalues[mode]
+                e_vec = eigenvectors[mode]
+
+                disp = np.dot(np.dot((e_vec.T), -gradient), e_vec) / e_val
+                disps += disp
+
+            # update positions
+            coord = coord + disps
+            
+        else: #Dynamics/MEP
+
+            try:
+                coord,mom = lepsnorm(coord,mom,masses,gradient,hessian,step_size)
+            except LinAlgError:
+                error="Surface Error::Energy could not be evaluated at step {}. Positions might be beyond the validity of the surface. Steps truncated".format(itcounter + 1)
+                terminate = True
+
+            if calc_type=="MEP":
+                # reset momenta to zero if doing a MEP
+                mom=np.zeros(3)
+            
+        if not terminate:
+            # Update records
+            trajectory.append(np.column_stack((coord,mom)))
+    
+    # convert to array and return
+    return (np.array(trajectory),error)

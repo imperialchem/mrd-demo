@@ -20,10 +20,9 @@
 
 from params import params
 from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
-from lepsmove import lepsnorm,kinetic_energy,velocities,velocity_AC
+from lepsmove import calc_trajectory,kinetic_energy,velocities,velocity_AC
 
 import numpy as np
-from numpy.linalg.linalg import LinAlgError
 
 from matplotlib import use as mpl_use
 mpl_use("TkAgg") # might need to be changed on different operating systems
@@ -74,7 +73,6 @@ class Interactive():
         
         defaults = config['defaults']
         self.H   = float(defaults['Hparam'])   #Surface parameter
-        self.lim = float(defaults['lim']) #Calculation will stop once this distance is exceeded
 
         self.Vmat = None       #Array where potential is stored for each gridpoint
         self.old_params = None #Variable used to prevent surface being recalculated
@@ -385,90 +383,6 @@ class Interactive():
 
         self.old_params = new_params
                         
-    def get_trajectory(self):
-        """Get dynamics, MEP or optimisation"""
-        
-        # Set initial coordinates
-        self.coord=np.array([self.xrabi,self.xrbci,self.theta])
-
-        if self.calc_type == "Dynamics":
-            # Set initial momenta (theta component = 0)
-            self.mom=np.array([self.prabi,self.prbci,0])
-            step_size=self.dt
-        else:
-            # If not dynamics, set momenta to zero
-            self.mom=np.zeros(3)
-
-            if self.calc_type == "MEP":
-                # Increase the step size to compensate for absence of inertial term
-                step_size = 15*self.dt 
-        
-        #Initialise outputs
-        self.trajectory = [np.column_stack((self.coord,self.mom))]
-
-        #Flag to stop appending to output in case of a crash
-        terminate = False        
-
-        itcounter = 0
-        while itcounter < self.steps and not terminate:
-            itcounter = itcounter+1            
-
-            #Get current gradient, and Hessian
-            gradient = leps_gradient(*self.coord,self.morse_params,self.H)
-            hessian = leps_hessian(*self.coord,self.morse_params,self.H)
-
-            if self.calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
-                
-                #Diagonalise Hessian
-                eigenvalues, eigenvectors = np.linalg.eig(hessian)
-                
-                #Eigenvalue test
-                neg_eig_i = [i for i,eig in enumerate(eigenvalues) if eig < -0.01]
-                if len(neg_eig_i) == 0 and self.calc_type == "Opt TS":
-                    msgbox.showinfo("Eigenvalues Info", "No negative curvatures at this geometry")
-                    terminate = True
-                elif len(neg_eig_i) == 1 and self.calc_type == "Opt Min":
-                    msgbox.showerror("Eigenvalues Error", "Too many negative curvatures at this geometry")
-                    terminate = True                    
-                elif len(neg_eig_i) > 1:
-                    msgbox.showerror("Eigenvalues Error", "Too many negative curvatures at this geometry")
-                    terminate = True
-                
-                #Optimiser
-                disps = np.zeros(3)
-                for mode in range(len(eigenvalues)):
-                    e_val = eigenvalues[mode]
-                    e_vec = eigenvectors[mode]
-
-                    disp = np.dot(np.dot((e_vec.T), -gradient), e_vec) / e_val
-                    disps += disp
-
-                # update positions
-                self.coord = self.coord + disps
-                
-            else: #Dynamics/MEP
-
-                try:
-                    self.coord,self.mom = lepsnorm(self.coord,self.mom,self.masses,gradient,hessian,step_size)
-                except LinAlgError:
-                    msgbox.showerror("Surface Error", "Energy could not be evaulated at step {}. Steps truncated".format(itcounter + 1))
-                    terminate = True
-
-                if self.calc_type=="MEP":
-                    # reset momenta to zero if doing a MEP
-                    self.mom=np.zeros(3)
-                
-            if self.coord[0] > self.lim or self.coord[1] > self.lim: #Stop calc if distance lim is exceeded
-                msgbox.showerror("Surface Error", "Surface Limits exceeded at step {}. Steps truncated".format(itcounter + 1))
-                terminate = True
-                    
-            if not terminate:
-                # Update records
-                self.trajectory.append(np.column_stack((self.coord,self.mom)))
-        
-        # convert to arrays
-        self.trajectory=np.array(self.trajectory)
- 
     def get_last_geo(self, *args):
         """Copy last geometry and momenta"""
         self.entries["xrabi"][0].delete(0, tk.END)
@@ -486,8 +400,15 @@ class Interactive():
     def export(self, *args):
         """Run calculation and print output in CSV format"""
         self._read_entries()
-        self.get_trajectory()
         
+        coord_init=np.array([self.xrabi,self.xrbci,self.theta])
+        # Set initial momenta (theta component = 0)
+        mom_init=np.array([self.prabi,self.prbci,0])
+
+        self.trajectory,error=calc_trajectory(coord_init,mom_init,self.masses,self.morse_params,self.H,self.steps,self.dt,self.calc_type)
+        if error!='':
+            msgbox.showerror(*error.split('::'))
+       
         filename = asksaveasfilename(defaultextension=".csv")
         if not filename:
             return
@@ -517,8 +438,15 @@ class Interactive():
         """Generate plot based on what type has been selected"""
         self._read_entries()
         self.get_surface()
-        self.get_trajectory()
-        
+
+        coord_init=np.array([self.xrabi,self.xrbci,self.theta])
+        # Set initial momenta (theta component = 0)
+        mom_init=np.array([self.prabi,self.prbci,0])
+
+        self.trajectory,error=calc_trajectory(coord_init,mom_init,self.masses,self.morse_params,self.H,self.steps,self.dt,self.calc_type)
+        if error!='':
+            msgbox.showerror(*error.split('::'))
+       
         if self.plot_type == "Contour Plot":
             self.plot_contour()
             self.plot_init_pos()
