@@ -20,7 +20,7 @@
 
 from params import params
 from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
-from lepsmove import lepsnorm,kinetic_energy,velocities
+from lepsmove import lepsnorm,kinetic_energy,velocities,velocity_AC
 
 import numpy as np
 from numpy.linalg.linalg import LinAlgError
@@ -177,10 +177,10 @@ class Interactive():
         type_frame = self._add_frame(dict(master=self.root, text="Plot Type", **sunken), gk('110055news'))
         
         if advanced:
-            plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
+            plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", "Internuclear Velocities vs Time",
                 "Momenta vs Time", "Energy vs Time", "p(AB) vs p(BC)", "v(AB) vs v(BC)", "Animation"]     
         else:
-            plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", 
+            plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", "Internuclear Velocities vs Time", 
                 "Momenta vs Time", "Energy vs Time", "Animation"]     
         
         self._add_optionmenu(type_frame, "plot_type", plot_types , {}, gk('00'), {"width":20})
@@ -530,8 +530,10 @@ class Interactive():
             self.plot_init_pos()
         elif self.plot_type == "Internuclear Distances vs Time":
             self.plot_ind_vs_t()
+        elif self.plot_type == "Internuclear Velocities vs Time":
+            self.plot_inv_vs_t()
         elif self.plot_type == "Momenta vs Time":
-            self.plot_inm_vs_t()
+            self.plot_momenta_vs_t()
         elif self.plot_type == "Energy vs Time":
             self.plot_e_vs_t()
         elif self.plot_type == "p(AB) vs p(BC)":
@@ -558,9 +560,8 @@ class Interactive():
         plt.xlim([min(self.x),max(self.x)])
         plt.ylim([min(self.y),max(self.y)])
       
-        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-8:
-            lc = colorline(self.trajectory[:,0,0], self.trajectory[:,1,0], cmap = plt.get_cmap("jet"), linewidth=1)
-            ax.add_collection(lc)
+        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-7:
+            plt.plot(self.trajectory[:,0,0], self.trajectory[:,1,0], linestyle='', marker='o', markersize=1.5, color='black')
         else:
             msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
                Likely the initial collision angle is not 180°. \
@@ -636,14 +637,12 @@ class Interactive():
         plt.autoscale()
         plt.axes().set_aspect('equal')
 
-        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-8:
+        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-7:
             #Plot transformed trajectory
             srab = a * self.trajectory[:,0,0] + b * self.trajectory[:,1,0] * np.cos(beta)
             srbc = b * self.trajectory[:,1,0] * np.sin(beta)
         
-            lc = colorline(srab, srbc, cmap = plt.get_cmap("jet"), linewidth=2)
-        
-            ax.add_collection(lc)
+            plt.plot(srab, srbc, linestyle='', marker='o', markersize=1.5, color='black')
         else:
             msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
                Likely the initial collision angle is not 180°. \
@@ -676,7 +675,7 @@ class Interactive():
         levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
         ax.contour(X, Y, Z, zdir='z', levels=levels, offset=ax.get_zlim()[0]-1)
 
-        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-8:
+        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-7:
             ax.plot(self.trajectory[:,0,0], self.trajectory[:,1,0],
                     leps_energy(self.trajectory[:,0,0],self.trajectory[:,1,0],self.trajectory[:,2,0],self.morse_params,self.H),
                     color='black', linestyle='none', marker='o', markersize=2)
@@ -695,7 +694,7 @@ class Interactive():
         ax = plt.gca()
         ax.get_xaxis().get_major_formatter().set_useOffset(False)
         ax.get_yaxis().get_major_formatter().set_useOffset(False)
-              
+
         if self.calc_type == "Dynamics": 
             xaxis=self.dt*np.arange(len(self.trajectory))
             plt.xlabel("Time")
@@ -713,8 +712,48 @@ class Interactive():
         
         plt.draw()
         plt.pause(0.0001)
+
+    def plot_inv_vs_t(self):
+        """Internuclear velocities VS time"""
+        plt.clf()
+        ax = plt.gca()
+        ax.get_xaxis().get_major_formatter().set_useOffset(False)
+        ax.get_yaxis().get_major_formatter().set_useOffset(False)
+ 
+        # calculate velocities
+        veloc=[]
+        for point in self.trajectory:
+            # velicities in internal coordinates
+            internal_veloc=list(velocities(point[:,0],point[:,1],self.masses))
+            # calculate magnitude of veloctity between AC
+            vAC=velocity_AC(point[:,0],*internal_veloc[0:2])
+            # make list of internuclear velocities
+            in_veloc=internal_veloc[0:2]+[vAC]
+ 
+            veloc.append(in_veloc)
+
+        veloc=np.array(veloc)
+ 
+        if self.calc_type == "Dynamics":
+            xaxis=self.dt*np.arange(len(self.trajectory))
+            plt.xlabel("Time")
+        else:
+            xaxis=np.arange(len(self.trajectory))
+            plt.xlabel("Steps")
+ 
+        plt.ylabel("Velocity")
+
+        plt.plot(xaxis, veloc[:,0], label = "A-B")
+        plt.plot(xaxis, veloc[:,1], label = "B-C")
+        plt.plot(xaxis, veloc[:,2], label = "A-C")
+ 
+        plt.legend()
+ 
+        plt.draw()
+        plt.pause(0.0001)
+      
         
-    def plot_inm_vs_t(self):
+    def plot_momenta_vs_t(self):
         """Momenta VS Time"""
         plt.clf()
         ax = plt.gca()

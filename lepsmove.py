@@ -66,6 +66,29 @@ def velocities(coord,mom,masses):
     return mom.dot(G)
 
 
+def velocity_AC(coord,vAB,vBC):
+    '''
+    Calculate internuclear velocity between A and C atoms, by doing
+    the vecor sum of the AB and BC velocities and projecting it onto
+    the AC axis.
+    '''
+    # setup frame vectors
+    AB_vec=np.array([coord[0],0])
+    BC_vec=np.array([-np.cos(coord[2]),np.sin(coord[2])])*coord[1]
+    AC_vec=AB_vec+BC_vec
+    # normalise frame vectors
+    AB_nvec=AB_vec/np.linalg.norm(AB_vec)
+    BC_nvec=BC_vec/np.linalg.norm(BC_vec)
+    AC_nvec=AC_vec/np.linalg.norm(AC_vec)
+
+    # velocity vectors
+    AB_vvec=-vAB*AB_nvec
+    BC_vvec=-vBC*BC_nvec
+    AC_vvec=AB_vvec+BC_vvec #note this is not along AC_nvec
+
+    return -np.dot(AC_vvec,AC_nvec)
+
+
 def lepsnorm(coord,mom,masses,gradient,hessian,dt):
     '''
     Updates coordinates and momenta by a time step.
@@ -107,7 +130,7 @@ def lepsnorm(coord,mom,masses,gradient,hessian,dt):
     
     displacementN = np.zeros(3)
 
-    epsilon = 1e-15
+    epsilon = 1e-14
 
     for i in range(3):
         if w2[i] < - epsilon: # negative curvature of the potential
