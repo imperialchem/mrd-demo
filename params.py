@@ -72,6 +72,8 @@ def params(a,b,c):
     
     #Open parameter file
     config = ConfigParser(inline_comment_prefixes=(';', '#'))
+    #The line below allows for dictionary keys with capital letters
+    config.optionxform = lambda op:op
     config.read('params.ini')
     try:
         isotopes = config['isotopes']
@@ -84,7 +86,6 @@ def params(a,b,c):
     abc = (a + b + c)
     
     #Replace atoms set by the isotopes section in parameters file
-    
     for i, o in isotopes.items():
         ab  =  ab.replace(i, o)
         bc  =  bc.replace(i, o)
