@@ -75,7 +75,8 @@ class Interactive():
         self.H   = float(defaults['Hparam'])   #Surface parameter
 
         self.Vmat = None       #Array where potential is stored for each gridpoint
-        self.old_params = None #Variable used to prevent surface being recalculated
+        self.surf_params = None #Variable used to prevent surface being recalculated
+        self.traj_params = None #Variable used to prevent trajectory being recalculated
         
         self.entries  = {} #Dictionary of entries to be read on refresh (user input)
         self.defaults = {  #Defaults for each entry
@@ -90,7 +91,7 @@ class Interactive():
             "steps"    : ["500"         , int  , lambda x: max(1, x)          ],
             "dt"       : ["0.002"       , float, lambda x: max(1e-7,x)        ],
             "cutoff"   : ["-20"         , float, None                         ],
-            "spacing"  : ["5"           , int  , None                         ],
+            "spacing"  : ["5"           , float, None                         ],
             "calc_type": ["Dynamics"    , str  , None                         ],
             "theta"    : ["180"         , float, lambda x:np.deg2rad(x)       ],
             "plot_type": ["Contour Plot", str  , None                         ]
@@ -103,9 +104,6 @@ class Interactive():
             if procfunc: #Check whether processing is needed
                 val = procfunc(val)
             setattr(self, key, val)
-        
-        #This is needed to allow surface to be calculated on the first run
-        self._firstrun = True
         
         ###GUI###
         
@@ -196,7 +194,7 @@ class Interactive():
         
         #Contour Spacing Frame
         spacing_frame = self._add_frame(dict(master=self.root, text="Contour Spacing", **sunken), gk('410055news'))
-        self._add_scale( spacing_frame, "spacing", {"from_":1, "to":10, "orient":"horizontal"}, gk('00ew'), {"length":200})
+        self._add_scale( spacing_frame, "spacing", {"from_":0.5, "to":10, "resolution":0.5, "orient":"horizontal"}, gk('00ew'), {"length":200})
         
         #Geometry Info Frame
         
@@ -238,16 +236,12 @@ class Interactive():
         self._add_button(geometry_frame, {"text": "Plot"}, gk('400055'), {"<Button-1>": self.plot_eigen})
         
         ###First Run###
-        
-        # Initialise params and info
-        self.get_params()
-        self.update_geometry_info()
-        
+                
         #Plot
         warnings.filterwarnings("ignore")
         self.fig = plt.figure('Plot', figsize=(5,5))
         self.update_plot()
-        
+
         #Make sure all plots are closed on exit
         def cl():            
             plt.close('all')
@@ -363,15 +357,8 @@ class Interactive():
          
     def get_surface(self):
         """Get the full potential energy surface (Vmat) at specified grid points or rAB and rBC."""
-        self.get_params()
         
-        #Check if params have changed. If not, no need to recalculate
-        new_params = [self.a, self.b, self.c, self.theta]
-        if self.old_params == new_params and not self._firstrun:
-            return
-
         resl = 0.02 #Resolution
-        self._firstrun = False
         
         #Get grid
         self.x = np.arange(self.plot_limits[0,0],self.plot_limits[0,1],resl)
@@ -381,8 +368,6 @@ class Interactive():
 
         self.Vmat=leps_energy(X,Y,self.theta,self.morse_params,self.H)
 
-        self.old_params = new_params
-                        
     def get_last_geo(self, *args):
         """Copy last geometry and momenta"""
         self.entries["xrabi"][0].delete(0, tk.END)
@@ -400,7 +385,7 @@ class Interactive():
     def export(self, *args):
         """Run calculation and print output in CSV format"""
         self._read_entries()
-        
+
         coord_init=np.array([self.xrabi,self.xrbci,self.theta])
         # Set initial momenta (theta component = 0)
         mom_init=np.array([self.prabi,self.prbci,0])
@@ -408,7 +393,7 @@ class Interactive():
         self.trajectory,error=calc_trajectory(coord_init,mom_init,self.masses,self.morse_params,self.H,self.steps,self.dt,self.calc_type)
         if error!='':
             msgbox.showerror(*error.split('::'))
-       
+        
         filename = asksaveasfilename(defaultextension=".csv")
         if not filename:
             return
@@ -437,16 +422,28 @@ class Interactive():
     def update_plot(self, *args):
         """Generate plot based on what type has been selected"""
         self._read_entries()
-        self.get_surface()
+        self.get_params()
+        
+        # Check if atom types and collitions angle have changed
+        new_surf_params = (self.a, self.b, self.c, self.theta)
+        if self.surf_params != new_surf_params:
+            self.get_surface()
 
-        coord_init=np.array([self.xrabi,self.xrbci,self.theta])
-        # Set initial momenta (theta component = 0)
-        mom_init=np.array([self.prabi,self.prbci,0])
+        # Check if need to calculate new trajectory
+        coord_init=(self.xrabi,self.xrbci,self.theta)
+        mom_init=(self.prabi,self.prbci,0) #Set initial momenta (theta component = 0)
+        new_traj_params=(coord_init,mom_init,self.steps,self.dt,self.calc_type)
+        if self.surf_params!=new_surf_params or self.traj_params!=new_traj_params: 
+            self.update_geometry_info()
 
-        self.trajectory,error=calc_trajectory(coord_init,mom_init,self.masses,self.morse_params,self.H,self.steps,self.dt,self.calc_type)
-        if error!='':
-            msgbox.showerror(*error.split('::'))
-       
+            self.trajectory,error=calc_trajectory(np.array(coord_init),np.array(mom_init),self.masses,
+                                            self.morse_params,self.H,self.steps,self.dt,self.calc_type)
+            if error!='':
+                msgbox.showerror(*error.split('::'))
+
+        self.surf_params=new_surf_params
+        self.traj_params=new_traj_params
+
         if self.plot_type == "Contour Plot":
             self.plot_contour()
             self.plot_init_pos()
@@ -598,7 +595,7 @@ class Interactive():
         
         Z = np.clip(self.Vmat, -10000, self.cutoff)
         
-        ax.plot_surface(X, Y, Z, rstride=self.spacing, cstride=self.spacing, cmap='jet', alpha=0.3, linewidth=0.25, edgecolor='black')
+        ax.plot_surface(X, Y, Z, rstride=int(self.spacing)+1, cstride=int(self.spacing)+1, cmap='jet', alpha=0.3, linewidth=0.25, edgecolor='black')
 
         levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
         ax.contour(X, Y, Z, zdir='z', levels=levels, offset=ax.get_zlim()[0]-1)
