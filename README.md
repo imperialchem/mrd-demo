@@ -22,7 +22,7 @@ In a terminal, change directory to the LepsPy directory and execute "python leps
 
 #### [lepsgui.py](./lepsgui.py)
 
-This is the main program. lepsgui generates the GUI and plots, and drives the trajectory calculations.
+This is the main program. lepsgui generates the GUI, and drives the calculations.
 
 #### [params.ini](./params.ini)
 
@@ -40,3 +40,7 @@ lepspoint calculations the energy, first and second energy derivatives for any p
 
 This file contains several functions related to the displacement of the system and its dynamic state.
 
+
+#### [lepsplots.py](./lepsplots.py)
+
+This file contains the functions that plot the results of the simulation.

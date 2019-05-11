@@ -21,6 +21,7 @@
 from params import params
 from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
 from lepsmove import calc_trajectory,kinetic_energy,velocities,velocity_AC
+from lepsplots import plot_contour,plot_skew,plot_surface,plot_ind_vs_t,plot_inv_vs_t,plot_momenta_vs_t,plot_momenta,plot_velocities,plot_e_vs_t,animation,plot_init_pos
 
 import numpy as np
 
@@ -28,9 +29,6 @@ from matplotlib import use as mpl_use
 mpl_use("TkAgg") # might need to be changed on different operating systems
 
 import matplotlib.pyplot as plt
-import matplotlib.collections as mcoll
-from matplotlib.animation import FuncAnimation
-from mpl_toolkits.mplot3d import Axes3D
 import warnings
 
 import tkinter as tk
@@ -77,6 +75,9 @@ class Interactive():
         self.Vmat = None       #Array where potential is stored for each gridpoint
         self.surf_params = None #Variable used to prevent surface being recalculated
         self.traj_params = None #Variable used to prevent trajectory being recalculated
+
+        self.init_point_curvature = [] #PES curvature at initial position
+        self.init_point_nmodes = [] #Normal modes at initial position
         
         self.entries  = {} #Dictionary of entries to be read on refresh (user input)
         self.defaults = {  #Defaults for each entry
@@ -235,7 +236,6 @@ class Interactive():
         
         self._add_button(geometry_frame, {"text": "Plot"}, gk('400055'), {"<Button-1>": self.plot_eigen})
         
-        ###First Run###
                 
         #Plot
         warnings.filterwarnings("ignore")
@@ -421,10 +421,13 @@ class Interactive():
             
     def update_plot(self, *args):
         """Generate plot based on what type has been selected"""
-        self._read_entries()
-        self.get_params()
-        
-        # Check if atom types and collitions angle have changed
+
+        # Besides setting up information about initial position
+        # this also reads GUI entries and gets relevant parameters
+        # as it calls _read_entries() and get_params()
+        self.update_geometry_info()
+
+        # Check if atom types and collision angle have changed
         new_surf_params = (self.a, self.b, self.c, self.theta)
         if self.surf_params != new_surf_params:
             self.get_surface()
@@ -434,8 +437,6 @@ class Interactive():
         mom_init=(self.prabi,self.prbci,0) #Set initial momenta (theta component = 0)
         new_traj_params=(coord_init,mom_init,self.steps,self.dt,self.calc_type)
         if self.surf_params!=new_surf_params or self.traj_params!=new_traj_params: 
-            self.update_geometry_info()
-
             self.trajectory,error=calc_trajectory(np.array(coord_init),np.array(mom_init),self.masses,
                                             self.morse_params,self.H,self.steps,self.dt,self.calc_type)
             if error!='':
@@ -443,436 +444,52 @@ class Interactive():
 
         self.surf_params=new_surf_params
         self.traj_params=new_traj_params
+        
+        # Set message to show when trajectory not shown
+        warnmessage="The angle between bonds is changing along the simulation. \
+                     Likely the initial collision angle is not 180°. \
+                     Potential energy surfaces will change with time: surface at time 0 shown. \
+                     The trajectory is not drawn in this plot."
 
         if self.plot_type == "Contour Plot":
-            self.plot_contour()
-            self.plot_init_pos()
+            plot_contour(self.trajectory,self.x,self.y,self.Vmat,self.cutoff,self.spacing)
+            plot_init_pos(self.trajectory[0,:,0])
+            if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) > 1e-7:
+                msgbox.showinfo("Changing energy surfaces", warnmessage) 
+
         elif self.plot_type == "Surface Plot":
-            self.plot_surface()
-            self.plot_init_pos()
+            plot_surface(self.trajectory,self.morse_params,self.H,self.x,self.y,self.Vmat,self.cutoff,self.spacing)
+            if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) > 1e-7:
+                msgbox.showinfo("Changing energy surfaces", warnmessage) 
+
         elif self.plot_type == "Skew Plot":
-            self.plot_skew()
-            self.plot_init_pos()
+            plot_skew(self.trajectory,self.masses,self.x,self.y,self.Vmat,self.cutoff,self.spacing)
+            if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) > 1e-7:
+                msgbox.showinfo("Changing energy surfaces", warnmessage) 
+
         elif self.plot_type == "Internuclear Distances vs Time":
-            self.plot_ind_vs_t()
+            plot_ind_vs_t(self.trajectory,self.dt,self.calc_type)
+
         elif self.plot_type == "Internuclear Velocities vs Time":
-            self.plot_inv_vs_t()
+            plot_inv_vs_t(self.trajectory,self.masses,self.dt,self.calc_type)
+
         elif self.plot_type == "Momenta vs Time":
-            self.plot_momenta_vs_t()
+            plot_momenta_vs_t(self.trajectory,self.dt,self.calc_type)
+
         elif self.plot_type == "Energy vs Time":
-            self.plot_e_vs_t()
+            plot_e_vs_t(self.trajectory,self.masses,self.morse_params,self.H,self.dt,self.calc_type)
+
         elif self.plot_type == "p(AB) vs p(BC)":
-            self.plot_momenta()
+            plot_momenta(self.trajectory)
+
         elif self.plot_type == "v(AB) vs v(BC)":
-            self.plot_velocities()
+            plot_velocities(self.trajectory,self.masses)
+
         elif self.plot_type == "Animation":
-            self.animation()
-            
-    def plot_contour(self):    
-        """Contour Plot"""
-        plt.clf()
-        ax = plt.gca()
-        ax.get_xaxis().get_major_formatter().set_useOffset(False)
-        ax.get_yaxis().get_major_formatter().set_useOffset(False)
-        
-        plt.xlabel("AB Distance /Å")
-        plt.ylabel("BC Distance /Å")
-        
-        X, Y = np.meshgrid(self.x, self.y)
-        
-        levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
-        plt.contour(X, Y, self.Vmat, levels = levels)
-        plt.xlim([min(self.x),max(self.x)])
-        plt.ylim([min(self.y),max(self.y)])
-      
-        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-7:
-            plt.plot(self.trajectory[:,0,0], self.trajectory[:,1,0], linestyle='', marker='o', markersize=1.5, color='black')
-        else:
-            msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
-               Likely the initial collision angle is not 180°. \
-               Potential energy surfaces will change with time: surface at time 0 shown. \
-               The trajectory is not drawn in this plot.")
+            animation(self.trajectory,self.masses,[self.a,self.b,self.c],self.atom_map)
 
-        plt.draw()
-        plt.pause(0.0001) #This stops MPL from blocking
-            
-    def plot_skew(self):    
-        """Skew Plot"""
-        #
-        #Taken from:
-        #Introduction to Quantum Mechanics: A Time-Dependent Perspective
-        #Chapter 12.3.3
-        #
-        #Transform X and Y to Q1 and Q2, where
-        #Q1   = a*X + b*Y*cos(beta)
-        #Q2   = b*Y*sin(beta)
-        #a    = ((m_A * (m_B + m_C)) / (m_A + m_B + m_C)) ** 0.5
-        #b    = ((m_C * (m_A + m_B)) / (m_A + m_B + m_C)) ** 0.5
-        #beta = cos-1(((m_A * m_C) / ((m_B + m_C) * (m_A + m_B))) ** 0.5)
-        #
-        #m_i: mass of atom i
-        
-        plt.clf()
-        ax = plt.gca()
-        ax.get_xaxis().get_major_formatter().set_useOffset(False)
-        ax.get_yaxis().get_major_formatter().set_useOffset(False)
-        
-        plt.xlabel("$Q1 /\\AA.g^{1/2}.mol^{-1/2}$")
-        plt.ylabel("$Q2 /\\AA.g^{1/2}.mol^{-1/2}$")
-        
-        X, Y = np.meshgrid(self.x, self.y)
-        
-        ma,mb,mc = self.masses
-        
-        a    = ((ma * (mb + mc)) / np.sum(self.masses)) ** 0.5
-        b    = ((mc * (ma + mb)) / np.sum(self.masses)) ** 0.5
-        beta = np.arccos(((ma * mc) / ((mb + mc) * (ma + mb))) ** 0.5)
-
-        #Transform grid
-        Q1 = a * X + b * Y * np.cos(beta)
-        Q2 = b * Y * np.sin(beta)
-        
-        #Plot gridlines every 0.5A
-        grid_x = [self.x[0]] + list(np.arange(np.ceil(min(self.x) * 2) / 2, np.floor(max(self.x) * 2) / 2 + 0.5, 0.5)) + [self.x[-1]]
-        grid_y = [self.y[0]] + list(np.arange(np.ceil(min(self.y) * 2) / 2, np.floor(max(self.y) * 2) / 2 + 0.5, 0.5)) + [self.y[-1]]
-        
-        for x in grid_x:
-            r1 = [x, grid_y[ 0]]
-            r2 = [x, grid_y[-1]]
-
-            q1 = [a * r1[0] + b * r1[1] * np.cos(beta), b * r1[1] * np.sin(beta)]
-            q2 = [a * r2[0] + b * r2[1] * np.cos(beta), b * r2[1] * np.sin(beta)]
-                  
-            plt.plot([q1[0], q2[0]], [q1[1], q2[1]], lw=1, color='gray')
-            plt.text(q2[0], q2[1], str(x))
-            
-        for y in grid_y:
-            r1 = [grid_x[ 0], y]
-            r2 = [grid_x[-1], y]
-
-            q1 = [a * r1[0] + b * r1[1] * np.cos(beta), b * r1[1] * np.sin(beta)]
-            q2 = [a * r2[0] + b * r2[1] * np.cos(beta), b * r2[1] * np.sin(beta)]
-                  
-            plt.plot([q1[0], q2[0]], [q1[1], q2[1]], lw=1, color='gray')
-            plt.text(q2[0], q2[1], str(y))
-            
-        #Plot transformed PES
-        levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
-        plt.contour(Q1, Q2, self.Vmat, levels = levels)
-        plt.autoscale()
-        plt.axes().set_aspect('equal')
-
-        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-7:
-            #Plot transformed trajectory
-            srab = a * self.trajectory[:,0,0] + b * self.trajectory[:,1,0] * np.cos(beta)
-            srbc = b * self.trajectory[:,1,0] * np.sin(beta)
-        
-            plt.plot(srab, srbc, linestyle='', marker='o', markersize=1.5, color='black')
-        else:
-            msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
-               Likely the initial collision angle is not 180°. \
-               Potential energy surfaces will change with time: surface at time 0 shown. \
-               The trajectory is not drawn in this plot.")
-       
-        plt.draw()
-        plt.pause(0.0001)
-        
-    def plot_surface(self):
-        """3d Surface Plot"""
-        
-        plt.close('all') #New figure needed for 3D axes
-        self.fig_3d = plt.figure('Surface Plot', figsize=(5,5))
-        
-        ax = Axes3D(self.fig_3d)
-        
-        plt.xlabel("AB Distance /Å")
-        plt.ylabel("BC Distance /Å")
-        ax.set_zlabel("$V /kcal.mol^{-1}$")
-        
-        X, Y = np.meshgrid(self.x, self.y)
-        ax.set_xlim3d([min(self.x),max(self.x)])
-        ax.set_ylim3d([min(self.y),max(self.y)])
-        
-        Z = np.clip(self.Vmat, -10000, self.cutoff)
-        
-        ax.plot_surface(X, Y, Z, rstride=int(self.spacing)+1, cstride=int(self.spacing)+1, cmap='jet', alpha=0.3, linewidth=0.25, edgecolor='black')
-
-        levels = np.arange(np.min(self.Vmat) -1, float(self.cutoff), self.spacing)
-        ax.contour(X, Y, Z, zdir='z', levels=levels, offset=ax.get_zlim()[0]-1)
-
-        if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) < 1e-7:
-            ax.plot(self.trajectory[:,0,0], self.trajectory[:,1,0],
-                    leps_energy(self.trajectory[:,0,0],self.trajectory[:,1,0],self.trajectory[:,2,0],self.morse_params,self.H),
-                    color='black', linestyle='none', marker='o', markersize=2)
-        else:
-            msgbox.showinfo("Changing energy surfaces", "The angle between bonds is changing along the simulation. \
-               Likely the initial collision angle is not 180°. \
-               Potential energy surfaces will change with time: surface at time 0 shown. \
-               The trajectory is not drawn in this plot.")
-         
-        plt.draw()
-        plt.pause(0.0001)
-        
-    def plot_ind_vs_t(self):
-        """Internuclear Distances VS Time"""
-        plt.clf()
-        ax = plt.gca()
-        ax.get_xaxis().get_major_formatter().set_useOffset(False)
-        ax.get_yaxis().get_major_formatter().set_useOffset(False)
-
-        if self.calc_type == "Dynamics": 
-            xaxis=self.dt*np.arange(len(self.trajectory))
-            plt.xlabel("Time")
-        else:
-            xaxis=np.arange(len(self.trajectory))
-            plt.xlabel("Steps")
- 
-        plt.ylabel("Distance /Å")
-
-        ab, = plt.plot(xaxis, self.trajectory[:,0,0], label = "A-B")
-        bc, = plt.plot(xaxis, self.trajectory[:,1,0], label = "B-C")
-        ac, = plt.plot(xaxis, cos_rule(self.trajectory[:,0,0],self.trajectory[:,1,0],self.trajectory[:,2,0]), label = "A-C")
-        
-        plt.legend(handles=[ab, bc, ac])
-        
-        plt.draw()
-        plt.pause(0.0001)
-
-    def plot_inv_vs_t(self):
-        """Internuclear velocities VS time"""
-        plt.clf()
-        ax = plt.gca()
-        ax.get_xaxis().get_major_formatter().set_useOffset(False)
-        ax.get_yaxis().get_major_formatter().set_useOffset(False)
- 
-        # calculate velocities
-        veloc=[]
-        for point in self.trajectory:
-            # velicities in internal coordinates
-            internal_veloc=list(velocities(point[:,0],point[:,1],self.masses))
-            # calculate magnitude of veloctity between AC
-            vAC=velocity_AC(point[:,0],*internal_veloc[0:2])
-            # make list of internuclear velocities
-            in_veloc=internal_veloc[0:2]+[vAC]
- 
-            veloc.append(in_veloc)
-
-        veloc=np.array(veloc)
- 
-        if self.calc_type == "Dynamics":
-            xaxis=self.dt*np.arange(len(self.trajectory))
-            plt.xlabel("Time")
-        else:
-            xaxis=np.arange(len(self.trajectory))
-            plt.xlabel("Steps")
- 
-        plt.ylabel("Velocity")
-
-        plt.plot(xaxis, veloc[:,0], label = "A-B")
-        plt.plot(xaxis, veloc[:,1], label = "B-C")
-        plt.plot(xaxis, veloc[:,2], label = "A-C")
- 
-        plt.legend()
- 
-        plt.draw()
-        plt.pause(0.0001)
-      
-        
-    def plot_momenta_vs_t(self):
-        """Momenta VS Time"""
-        plt.clf()
-        ax = plt.gca()
-        ax.get_xaxis().get_major_formatter().set_useOffset(False)
-        ax.get_yaxis().get_major_formatter().set_useOffset(False)
- 
-        if self.calc_type == "Dynamics": 
-            xaxis=self.dt*np.arange(len(self.trajectory))
-            plt.xlabel("Time")
-        else:
-            xaxis=np.arange(len(self.trajectory))
-            plt.xlabel("Steps")
- 
-        plt.ylabel("Momentum")
-
-        time=self.dt*np.arange(len(self.trajectory))        
-
-        ab, = plt.plot(xaxis, self.trajectory[:,0,1], label = "A-B")
-        bc, = plt.plot(xaxis, self.trajectory[:,1,1], label = "B-C")
-        ac, = plt.plot(xaxis, self.trajectory[:,2,1], label = "θ")
-       
-        plt.legend(handles=[ab, bc, ac])
-        
-        plt.draw()
-        plt.pause(0.0001)      
-        
-    def plot_momenta(self):
-        """AB Momentum VS BC Momentum"""
-        plt.clf()
-        ax = plt.gca()
-        
-        plt.xlabel("AB Momentum")
-        plt.ylabel("BC Momentum")
-        
-        lc = colorline(self.trajectory[:,0,1], self.trajectory[:,1,1], cmap = plt.get_cmap("jet"), linewidth=1)
-        
-        ax.add_collection(lc)
-        ax.autoscale()
-        plt.draw()
-        plt.pause(0.0001)
-        
-    def plot_velocities(self):
-        """AB Velocity VS BC Velocity"""
- 
-        # calculate velocities in internal coordinates
-        veloc=[]
-        for point in self.trajectory:
-            veloc.append(velocities(point[:,0],point[:,1],self.masses))
-        veloc=np.array(veloc)
-      
-        plt.clf()
-        ax = plt.gca()
-        
-        plt.xlabel("AB Velocity")
-        plt.ylabel("BC Velocity")
-        
-        lc = colorline(veloc[:,0], veloc[:,1], cmap = plt.get_cmap("jet"), linewidth=1)
-        
-        ax.add_collection(lc)
-        ax.autoscale()
-        plt.draw()
-        plt.pause(0.0001)
-        
-    def plot_e_vs_t(self):
-        """Energy VS Time"""
-        plt.clf()
-        ax = plt.gca()
-        ax.get_xaxis().get_major_formatter().set_useOffset(False)
-        ax.get_yaxis().get_major_formatter().set_useOffset(False)
- 
-        if self.calc_type == "Dynamics": 
-            xaxis=self.dt*np.arange(len(self.trajectory))
-            plt.xlabel("Time")
-        else:
-            xaxis=np.arange(len(self.trajectory))
-            plt.xlabel("Steps")
-       
-        plt.ylabel("Energy")
-
-        time=self.dt*np.arange(len(self.trajectory))
-
-        # calculate energies
-        V=np.zeros(len(self.trajectory))
-        K=np.zeros(len(self.trajectory))
-        for i,point in enumerate(self.trajectory):
-            V[i]=leps_energy(*point[:,0],self.morse_params,self.H)
-            K[i]=kinetic_energy(point[:,0],point[:,1],self.masses)
-
-        pot, = plt.plot(xaxis, V, label = "Potential Energy")
-        kin, = plt.plot(xaxis, K, label = "Kinetic Energy")
-        tot, = plt.plot(xaxis, V+K, label = "Total Energy")
-        
-        plt.legend(handles=[pot, kin, tot])
-        
-        plt.draw()
-        plt.pause(0.0001)
-        
-    def animation(self):
-        """Animation"""
-        plt.close('all')
-        self.ani_fig = plt.figure('Animation', figsize=(5,5))
-        
-        #Positions in space of A, B and C relative to B
-        frames = len(self.trajectory)
-        positions = np.column_stack((- self.trajectory[:,0,0], np.zeros(frames),
-                                     np.zeros(frames), np.zeros(frames),
-                                     - np.cos(self.trajectory[:,2,0]) * self.trajectory[:,1,0],
-                                     np.sin(self.trajectory[:,2,0]) * self.trajectory[:,1,0]))
-        positions = np.reshape(positions,(frames,3,2))
-        
-	#Get centre of mass
-        com = self.masses.dot(positions[:])/np.sum(self.masses)
-        
-	#Translate to centre of mass (there might be a way to do this only with array operations)
-        positions = positions - np.reshape(np.column_stack((com,com,com)),(frames,3,2))
-
-        def init():
-            ap, bp, cp = patches
-            ax.add_patch(ap)
-            ax.add_patch(bp)
-            ax.add_patch(cp)
-            return ap, bp, cp,
-            
-        def update(i):
-            ap, bp, cp = patches
-            ap.center = positions[i,0]
-            bp.center = positions[i,1]
-            cp.center = positions[i,2]
-            return ap, bp, cp,
-            
-        ax = plt.axes(
-        xlim = (min(np.ravel(positions[:,:,0])) - 1, max(np.ravel(positions[:,:,0])) + 1),
-        ylim = (min(np.ravel(positions[:,:,1])) - 1, max(np.ravel(positions[:,:,1])) + 1)
-        )
-        ax.set_aspect('equal')
-            
-        patches = []
-        
-        for i,at_name in enumerate(["a", "b", "c"]):
-            at = self.entries[at_name][0].get()
-            vdw, col = self.atom_map[at]
-            patch = plt.Circle(positions[0,i], vdw * 0.25, color = col)
-            patches.append(patch)
-        
-        self.anim = FuncAnimation(self.ani_fig, update, init_func=init, frames=len(positions), repeat=True, interval=10)
-        
-        try:
-            plt.show()
-        except:
-            pass
-        
-    def plot_init_pos(self, *args):
-        """Cross representing initial geometry"""
-        if not self.plot_type == "Contour Plot":
-            return
-            
-        self.init_pos_plot, = plt.plot(self.trajectory[:1,0,0], self.trajectory[:1,1,0], marker='x', markersize=6, color="red")
-        plt.draw()
-        plt.pause(0.0001)
-        
-    def plot_eigen(self, *args):
-        """Plot eigenvectors and eigenvalues on contour plot"""
-        if not self.plot_type == "Contour Plot":
-            return
-            
-        self.update_geometry_info()
-        
-        evecs = self._eigenvectors
-        evals = self._eigenvalues
-        
-        self.eig1_plot = plt.arrow(
-            self.trajectory[0,0,0], 
-            self.trajectory[0,1,0], 
-            evecs[0][0] / 10,
-            evecs[0][1] / 10,
-            color = "blue" if evals[0] > 0 else "red",
-            label = "{:+7.3f}".format(evals[0])
-        )
-        self.eig2_plot = plt.arrow(
-            self.trajectory[0,0,0], 
-            self.trajectory[0,1,0], 
-            evecs[1][0] / 10,
-            evecs[1][1] / 10,
-            color = "blue" if evals[1] > 0 else "red",
-            label = "{:+7.3f}".format(evals[1])
-        )
-        
-        plt.draw()
-        plt.pause(0.0001)
-        
     def get_first(self):
-        """1 step of trajectory to get geometry properties"""
-        self._read_entries()
-        self.get_params()
+        """Gather information about the initial state."""
         
         coord=np.array([self.xrabi,self.xrbci,self.theta])
         mom=np.array([self.prabi,self.prbci,0])
@@ -886,12 +503,15 @@ class Interactive():
         
     def update_geometry_info(self, *args):
         """Updates the info pane"""
+        self._read_entries()
+        self.get_params()
+
         try:
             V,gradient,hessian,K = self.get_first()
             eigenvalues, eigenvectors = np.linalg.eig(hessian)
  
-            self._eigenvalues  = eigenvalues
-            self._eigenvectors = eigenvectors
+            self.init_point_curvature  = eigenvalues
+            self.init_point_nmodes = eigenvectors
            
             ke     = "{:+7.3f}".format(K)
             pe     = "{:+7.3f}".format(V)
@@ -934,48 +554,32 @@ class Interactive():
         self.i_evec12["text"] = evec12
         
         self.i_evec21["text"] = evec21
-        self.i_evec22["text"] = evec22      
+        self.i_evec22["text"] = evec22
+
+    def plot_eigen(self, *args):
+        """Plot eigenvectors and eigenvalues of the hessian on contour plot"""
+        if not self.plot_type == "Contour Plot":
+            return
+
+        evecs=self.init_point_nmodes
+        evals=self.init_point_curvature        
+
+        plt.arrow(self.trajectory[0,0,0], self.trajectory[0,1,0], 
+            evecs[0][0] / 10, evecs[0][1] / 10,
+            color = "blue" if evals[0] > 0 else "red",
+            label = "{:+7.3f}".format(evals[0]))
+     
+        plt.arrow(self.trajectory[0,0,0], self.trajectory[0,1,0], 
+            evecs[1][0] / 10, evecs[1][1] / 10,
+            color = "blue" if evals[1] > 0 else "red",
+            label = "{:+7.3f}".format(evals[1]))
         
-def colorline(
-    x, y, z=None, cmap=plt.get_cmap('copper'), norm=plt.Normalize(0.0, 1.0),
-        linewidth=3, alpha=1.0):
-    """
-    http://nbviewer.ipython.org/github/dpsanders/matplotlib-examples/blob/master/colorline.ipynb
-    http://matplotlib.org/examples/pylab_examples/multicolored_line.html
-    Plot a colored line with coordinates x and y
-    Optionally specify colors in the array z
-    Optionally specify a colormap, a norm function and a line width
-    """
-
-    # Default colors equally spaced on [0,1]:
-    if z is None:
-        z = np.linspace(0.0, 1.0, len(x))
-
-    # Special case if a single number:
-    if not hasattr(z, "__iter__"):  # to check for numerical input -- this is a hack
-        z = np.array([z])
-
-    z = np.asarray(z)
-
-    segments = make_segments(x, y)
-    lc = mcoll.LineCollection(segments, array=z, cmap=cmap, norm=norm,
-                              linewidth=linewidth, alpha=alpha)
-
-
-    return lc
-
-
-def make_segments(x, y):
-    """
-    Create list of line segments from x and y coordinates, in the correct format
-    for LineCollection: an array of the form numlines x (points per line) x 2 (x
-    and y) array
-    """
-
-    points = np.array([x, y]).T.reshape(-1, 1, 2)
-    segments = np.concatenate([points[:-1], points[1:]], axis=1)
-    return segments
+        plt.draw()
+        plt.pause(0.0001)
         
+        
+
+
 if __name__ == "__main__":
     
     parser = ArgumentParser(description="Starts the Triatomic LEPS GUI")
@@ -983,4 +587,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     interactive = Interactive(advanced = args.advanced)
-    
+ 
