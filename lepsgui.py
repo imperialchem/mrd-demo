@@ -76,9 +76,6 @@ class Interactive():
         self.surf_params = None #Variable used to prevent surface being recalculated
         self.traj_params = None #Variable used to prevent trajectory being recalculated
 
-        self.init_point_curvature = [] #PES curvature at initial position
-        self.init_point_nmodes = [] #Normal modes at initial position
-        
         self.entries  = {} #Dictionary of entries to be read on refresh (user input)
         self.defaults = {  #Defaults for each entry
            #Key        : Default value  , type , processing function
@@ -576,8 +573,6 @@ class Interactive():
         
         plt.draw()
         plt.pause(0.0001)
-        
-        
 
 
 if __name__ == "__main__":
