@@ -21,7 +21,7 @@
 from params import params
 from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
 from lepsmove import calc_trajectory,kinetic_energy,velocities,velocity_AC
-from lepsplots import plot_contour,plot_skew,plot_surface,plot_ind_vs_t,plot_inv_vs_t,plot_momenta_vs_t,plot_momenta,plot_velocities,plot_e_vs_t,animation,plot_init_pos
+from lepsplots import plot_contour,plot_skew,plot_surface,plot_ind_vs_t,plot_inv_vs_t,plot_momenta_vs_t,plot_momenta,plot_velocities,plot_e_vs_t,animation
 
 import numpy as np
 
@@ -450,7 +450,6 @@ class Interactive():
 
         if self.plot_type == "Contour Plot":
             plot_contour(self.trajectory,self.x,self.y,self.Vmat,self.cutoff,self.spacing)
-            plot_init_pos(self.trajectory[0,:,0])
             if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) > 1e-7:
                 msgbox.showinfo("Changing energy surfaces", warnmessage) 
 

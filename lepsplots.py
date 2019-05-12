@@ -47,6 +47,9 @@ def plot_contour(trajectory,x_grid,y_grid,Vmat,cutoff,spacing):
     if max(trajectory[:,2,0])-min(trajectory[:,2,0]) < 1e-7:
         plt.plot(trajectory[:,0,0], trajectory[:,1,0], linestyle='', marker='o', markersize=1.5, color='black')
 
+    # highlight initial position
+    plt.plot(trajectory[:1,0,0], trajectory[:1,1,0], marker='x', markersize=6, color="red")
+
     plt.draw()
     plt.pause(0.0001) #This stops matplotlib from blocking
 
@@ -123,7 +126,10 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
         srbc = b * trajectory[:,1,0] * np.sin(beta)
     
         plt.plot(srab, srbc, linestyle='', marker='o', markersize=1.5, color='black')
-   
+
+    # highlight initial position
+    plt.plot(srab[0], srbc[0], marker='x', markersize=6, color="red")
+  
     plt.draw()
     plt.pause(0.0001)
 
@@ -377,14 +383,6 @@ def animation(trajectory,masses,atom_list,atom_map):
         plt.show()
     except:
         pass
-
-
-def plot_init_pos(coord, *args):
-    """Cross representing initial geometry"""
-        
-    plt.plot(coord[0:1], coord[1:2], marker='x', markersize=6, color="red")
-    plt.draw()
-    plt.pause(0.0001)
 
 
 def colorline(x, y, z=None, cmap=plt.get_cmap('copper'), norm=plt.Normalize(0.0, 1.0),
