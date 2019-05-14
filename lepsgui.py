@@ -18,11 +18,6 @@
 #    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from params import params
-from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
-from lepsmove import calc_trajectory,kinetic_energy,velocities,velocity_AC
-from lepsplots import plot_contour,plot_skew,plot_surface,plot_ind_vs_t,plot_inv_vs_t,plot_momenta_vs_t,plot_momenta,plot_velocities,plot_e_vs_t,animation
-
 import numpy as np
 
 from matplotlib import use as mpl_use
@@ -37,6 +32,12 @@ from tkinter.filedialog import asksaveasfilename
 
 from configparser import ConfigParser
 from argparse import ArgumentParser
+
+from params import params
+from lepspoint import leps_energy,leps_gradient,leps_hessian,cos_rule
+from lepsmove import calc_trajectory,kinetic_energy,velocities,velocity_AC
+from lepsplots import plot_contour,plot_skew,plot_surface,plot_ind_vs_t,plot_inv_vs_t,plot_momenta_vs_t,plot_momenta,plot_velocities,plot_e_vs_t,animation
+
 
 class Interactive():
     
