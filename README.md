@@ -5,6 +5,8 @@ The first Python version of the code was written by Tristan Mackenzie, based on 
 
 ### Running the program
 
+Python 3.5 or higher is needed to run the program.
+
 Click on the **Clone or download** button to the right and download the zip archive with all the progeam files. You need to unpack the folder before you can run the program.
 
 The program is run through a graphical user interface (GUI) which is started by running the file **lepsgui.py**.
