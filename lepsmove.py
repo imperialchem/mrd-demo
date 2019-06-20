@@ -16,6 +16,11 @@
 #    along with LepsPy.  If not, see <http://www.gnu.org/licenses/>.
 
 
+# There are problems with energy conservation when theta is not 180 degrees.
+# This might be due to energy transfer into/from rotational motion which is
+# not properly described in this treatment (no Coriolis coupling).
+# The variation in total energy seems significant, so a bug is not to be rules out.
+
 import numpy as np
 from numpy.linalg.linalg import LinAlgError
 from lepspoint import leps_gradient,leps_hessian
@@ -106,31 +111,34 @@ def lepsnorm(coord,mom,masses,gradient,hessian,dt):
     back to internal coordinates.
     '''
 
-    # G-Matrix
+    # Transform into normal modes and do dynamics in mass-weighted normal modes
+    # The transformation does not seem so trivial. Has similarities with the Miyazawa 
+    # method described in: S. Caligano "Vibrational States" John Wiley & Sons (1976) sec. 4.6
+    # but it is not the same
+
     GM=_gmat(coord,masses)
     
-    GMVal, GMVec = np.linalg.eig(GM)
+    GMVal, GMVec = np.linalg.eigh(GM)
 
-    GMVal1 = GMVal ** 0.5    # 1/sqrt(mass) for each mode
-    GMVal2 = GMVal ** (-0.5) # sqrt(mass) for each mode
+    GMVal1 = GMVal ** 0.5
+    GMVal2 = GMVal ** (-0.5)
 
     GRR    = GMVec.dot(np.diag(GMVal1)).dot(GMVec.T)
     GROOT  = GMVec.dot(np.diag(GMVal2)).dot(GMVec.T)
 
-    # Transform into normal modes and do dynamics in normal modes
-    # Follow dynamics algorithm in:
-    # T. Helgaker, E. Uggerud, H.J. Aa. Jensen, Chem. Phys Lett. 173(2,3):145-150 (1990)
-
     # G-Matrix Weighted Hessian;
     mwhessian = GRR.dot(hessian).dot(GRR)
-    w2, transf = np.linalg.eig(mwhessian) #transf is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
+    w2, ALT = np.linalg.eigh(mwhessian) #ALT is antisymmetric version in Fort code but that does not give the right G-Matrix!!!!
     
     # Gradient Vector in mass-weighted normal modes
-    gradN = transf.T.dot(GRR).dot(gradient)
+    gradN = ALT.T.dot(GRR).dot(gradient)
     
     # Momentum Vector in normal modes
-    momN = transf.T.dot(GRR).dot(mom)
-    
+    momN = ALT.T.dot(GRR).dot(mom)
+
+    # The dynmics algorithm in mass-weighted normal modes follows:
+    # T. Helgaker, E. Uggerud, H.J. Aa. Jensen, Chem. Phys Lett. 173(2,3):145-150 (1990)
+   
     displacementN = np.zeros(3)
 
     epsilon = 1e-14
@@ -149,10 +157,10 @@ def lepsnorm(coord,mom,masses,gradient,hessian,dt):
             momN[i] = momN[i] * np.cos(wroot*dt) - gradN[i] * np.sin(wroot*dt) / wroot
             
     # update coordinates by first transforming displacementN into internal coordinates
-    coord = coord + GRR.dot(transf).dot(displacementN) 
+    coord = coord + GRR.dot(ALT).dot(displacementN) 
     
     # transform updated momentum back into internal coordinates
-    mom = GROOT.dot(transf).dot(momN)
+    mom = GROOT.dot(ALT).dot(momN)
             
     return (coord,mom)
 
@@ -190,13 +198,14 @@ def calc_trajectory(coord_init,mom_init,masses,morse_params,H_param,steps,dt,cal
         itcounter = itcounter+1            
 
         #Get current gradient, and Hessian
+        #(array unpacking *coord used below only works for python 3.5 or higher)
         gradient = leps_gradient(*coord,morse_params,H_param)
         hessian = leps_hessian(*coord,morse_params,H_param)
 
         if calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
             
             #Diagonalise Hessian
-            eigenvalues, eigenvectors = np.linalg.eig(hessian)
+            eigenvalues, eigenvectors = np.linalg.eigh(hessian)
             
             #Eigenvalue test
             neg_eig_i = [i for i,eig in enumerate(eigenvalues) if eig < -0.01]
