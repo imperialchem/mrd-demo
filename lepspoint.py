@@ -26,8 +26,6 @@
 
 import numpy as np
 
-# Check consistency with H parameter used
-k = 0.18 # In TRIATOMICS this is 0.18 but should be Sato parameter?
 #this state variable looks strange
 state = 1 # 1 for ground state, >1 for excited states
 
@@ -94,7 +92,7 @@ def _exchange(morse,anti_morse,k):
     return 0.5*(morse - anti_morse + k*(morse + anti_morse))
 
 
-def leps_energy(rAB,rBC,theta,params,H):
+def leps_energy(rAB,rBC,theta,params,k):
     '''Calculate LEPS potential energy for a given point in internal coordinates
        int_coord=array([rAB,rBC,theta])
        params=array([[D_A,B_A,re_A],
@@ -112,10 +110,10 @@ def leps_energy(rAB,rBC,theta,params,H):
                 _anti_morse(r,params[:,0],params[:,1],params[:,2]),k)
    
     #axis=-1 below allows vectorisation of the function
-    return 1/(1+H**2) * (np.sum(Q,axis=-1) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1,axis=-1),axis=-1))
+    return 1/(1+k) * (np.sum(Q,axis=-1) - state/2**0.5 *np.linalg.norm(J - np.roll(J,-1,axis=-1),axis=-1))
 
 
-def leps_gradient(rAB,rBC,theta,params,H):
+def leps_gradient(rAB,rBC,theta,params,k):
     '''Calculates the gradient of LEPS potential for a given point in internal coordinates
        int_coord=array([rAB,rBC,theta])
        params=array([[D_A,B_A,re_A],
@@ -156,10 +154,10 @@ def leps_gradient(rAB,rBC,theta,params,H):
  
     Jpart_grad_int=-state/(2**0.5 * np.linalg.norm(Jdiff)) * np.array([Jpart_grad_rAB,Jpart_grad_rBC,Jpart_grad_theta])
     
-    return 1/(1+H**2) * (Qpart_grad_int + Jpart_grad_int)
+    return 1/(1+k) * (Qpart_grad_int + Jpart_grad_int)
 
 
-def leps_hessian(rAB,rBC,theta,params,H):
+def leps_hessian(rAB,rBC,theta,params,k):
     '''Calculates the Hessian of LEPS potential for a given point in internal coordinates
        params=array([[D_A,B_A,re_A],
                      [D_B.B_B,re_B],
@@ -238,5 +236,5 @@ def leps_hessian(rAB,rBC,theta,params,H):
                                              [Jpart2_hess_drABdrBC,Jpart2_hess_drBC2,Jpart2_hess_drBCdtheta],
                                              [Jpart2_hess_drABdtheta,Jpart2_hess_drBCdtheta,Jpart2_hess_dtheta2]])
 
-    return 1/(1+H**2)*(Qpart_hess_int + (-state/2**0.5 * (Jpart1_hess_int+Jpart2_hess_int)))
+    return 1/(1+k)*(Qpart_hess_int + (-state/2**0.5 * (Jpart1_hess_int+Jpart2_hess_int)))
 

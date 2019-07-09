@@ -134,7 +134,7 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
     plt.pause(0.0001)
 
  
-def plot_surface(trajectory,morse_params,Hparam,x_grid,y_grid,Vmat,cutoff,spacing):
+def plot_surface(trajectory,morse_params,sato,x_grid,y_grid,Vmat,cutoff,spacing):
     """3d Surface Plot"""
     
     plt.close('all') #New figure needed for 3D axes
@@ -159,7 +159,7 @@ def plot_surface(trajectory,morse_params,Hparam,x_grid,y_grid,Vmat,cutoff,spacin
 
     if max(trajectory[:,2,0])-min(trajectory[:,2,0]) < 1e-7:
         ax.plot(trajectory[:,0,0], trajectory[:,1,0],
-                leps_energy(trajectory[:,0,0],trajectory[:,1,0],trajectory[:,2,0],morse_params,Hparam),
+                leps_energy(trajectory[:,0,0],trajectory[:,1,0],trajectory[:,2,0],morse_params,sato),
                 color='black', linestyle='none', marker='o', markersize=2)
      
     plt.draw()
@@ -297,7 +297,7 @@ def plot_velocities(trajectory,masses):
     plt.pause(0.0001)
 
     
-def plot_e_vs_t(trajectory,masses,morse_params,Hparam,dt,calc_type):
+def plot_e_vs_t(trajectory,masses,morse_params,sato,dt,calc_type):
     """Energy VS Time"""
     plt.clf()
     ax = plt.gca()
@@ -317,7 +317,7 @@ def plot_e_vs_t(trajectory,masses,morse_params,Hparam,dt,calc_type):
     V=np.zeros(len(trajectory))
     K=np.zeros(len(trajectory))
     for i,point in enumerate(trajectory):
-        V[i]=leps_energy(*point[:,0],morse_params,Hparam)
+        V[i]=leps_energy(*point[:,0],morse_params,sato)
         K[i]=kinetic_energy(point[:,0],point[:,1],masses)
 
     plt.plot(xaxis, V, label = "Potential Energy")

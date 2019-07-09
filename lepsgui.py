@@ -71,7 +71,7 @@ class Interactive():
         self.atom_map = atom_map
         
         defaults = config['defaults']
-        self.H   = float(defaults['Hparam'])   #Surface parameter
+        self.sato   = float(defaults['sato'])   #Surface parameter
 
         self.Vmat = None       #Array where potential is stored for each gridpoint
         self.surf_params = None #Variable used to prevent surface being recalculated
@@ -364,7 +364,7 @@ class Interactive():
 
         X,Y=np.meshgrid(self.x,self.y)
 
-        self.Vmat=leps_energy(X,Y,self.theta,self.morse_params,self.H)
+        self.Vmat=leps_energy(X,Y,self.theta,self.morse_params,self.sato)
 
     def get_last_geo(self, *args):
         """Copy last geometry and momenta"""
@@ -388,7 +388,7 @@ class Interactive():
         # Set initial momenta (theta component = 0)
         mom_init=np.array([self.prabi,self.prbci,0])
 
-        self.trajectory,error=calc_trajectory(coord_init,mom_init,self.masses,self.morse_params,self.H,self.steps,self.dt,self.calc_type)
+        self.trajectory,error=calc_trajectory(coord_init,mom_init,self.masses,self.morse_params,self.sato,self.steps,self.dt,self.calc_type)
         if error!='':
             msgbox.showerror(*error.split('::'))
         
@@ -409,7 +409,7 @@ class Interactive():
         V=np.zeros(len(self.trajectory))
         K=np.zeros(len(self.trajectory))
         for i,point in enumerate(self.trajectory):
-            V[i]=leps_energy(*point[:,0],self.morse_params,self.H)
+            V[i]=leps_energy(*point[:,0],self.morse_params,self.sato)
             K[i]=kinetic_energy(point[:,0],point[:,1],self.masses)
 
         data=np.column_stack((first_column,np.reshape(self.trajectory,(len(self.trajectory),6))
@@ -436,7 +436,7 @@ class Interactive():
         new_traj_params=(coord_init,mom_init,self.steps,self.dt,self.calc_type)
         if self.surf_params!=new_surf_params or self.traj_params!=new_traj_params: 
             self.trajectory,error=calc_trajectory(np.array(coord_init),np.array(mom_init),self.masses,
-                                            self.morse_params,self.H,self.steps,self.dt,self.calc_type)
+                                            self.morse_params,self.sato,self.steps,self.dt,self.calc_type)
             if error!='':
                 msgbox.showerror(*error.split('::'))
 
@@ -455,7 +455,7 @@ class Interactive():
                 msgbox.showinfo("Changing energy surfaces", warnmessage) 
 
         elif self.plot_type == "Surface Plot":
-            plot_surface(self.trajectory,self.morse_params,self.H,self.x,self.y,self.Vmat,self.cutoff,self.spacing)
+            plot_surface(self.trajectory,self.morse_params,self.sato,self.x,self.y,self.Vmat,self.cutoff,self.spacing)
             if max(self.trajectory[:,2,0])-min(self.trajectory[:,2,0]) > 1e-7:
                 msgbox.showinfo("Changing energy surfaces", warnmessage) 
 
@@ -474,7 +474,7 @@ class Interactive():
             plot_momenta_vs_t(self.trajectory,self.dt,self.calc_type)
 
         elif self.plot_type == "Energy vs Time":
-            plot_e_vs_t(self.trajectory,self.masses,self.morse_params,self.H,self.dt,self.calc_type)
+            plot_e_vs_t(self.trajectory,self.masses,self.morse_params,self.sato,self.dt,self.calc_type)
 
         elif self.plot_type == "p(AB) vs p(BC)":
             plot_momenta(self.trajectory)
@@ -491,9 +491,9 @@ class Interactive():
         coord=np.array([self.xrabi,self.xrbci,self.theta])
         mom=np.array([self.prabi,self.prbci,0])
 
-        V = leps_energy(*coord,self.morse_params,self.H)
-        gradient = leps_gradient(*coord,self.morse_params,self.H)
-        hessian = leps_hessian(*coord,self.morse_params,self.H)
+        V = leps_energy(*coord,self.morse_params,self.sato)
+        gradient = leps_gradient(*coord,self.morse_params,self.sato)
+        hessian = leps_hessian(*coord,self.morse_params,self.sato)
         K = kinetic_energy(coord,mom,self.masses)
         
         return (V,gradient,hessian,K)

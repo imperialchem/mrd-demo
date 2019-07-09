@@ -165,7 +165,7 @@ def lepsnorm(coord,mom,masses,gradient,hessian,dt):
     return (coord,mom)
 
 
-def calc_trajectory(coord_init,mom_init,masses,morse_params,H_param,steps,dt,calc_type):
+def calc_trajectory(coord_init,mom_init,masses,morse_params,sato,steps,dt,calc_type):
     '''
     Make the system move. This may be the calculation of a inertial trajectory
     (calc_type="Dynamics"), a minimum energy path (calc_type="MEP"), a local
@@ -199,8 +199,8 @@ def calc_trajectory(coord_init,mom_init,masses,morse_params,H_param,steps,dt,cal
 
         #Get current gradient, and Hessian
         #(array unpacking *coord used below only works for python 3.5 or higher)
-        gradient = leps_gradient(*coord,morse_params,H_param)
-        hessian = leps_hessian(*coord,morse_params,H_param)
+        gradient = leps_gradient(*coord,morse_params,sato)
+        hessian = leps_hessian(*coord,morse_params,sato)
 
         if calc_type in ["Opt Min", "Opt TS"]: #Optimisation calculations
             
