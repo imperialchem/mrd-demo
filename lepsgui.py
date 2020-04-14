@@ -83,14 +83,14 @@ class Interactive():
             "a"        : ["H"           , str  , None                         ],
             "b"        : ["H"           , str  , None                         ],
             "c"        : ["H"           , str  , None                         ],
-            "xrabi"    : ["2.3"         , float, None                         ],
-            "xrbci"    : ["0.74"        , float, None                         ],
-            "prabi"    : ["-2.5"        , float, None                         ],
-            "prbci"    : ["-1.5"        , float, None                         ],
+            "xrabi"    : ["230"         , float, None                         ],
+            "xrbci"    : ["74"          , float, None                         ],
+            "prabi"    : ["-5.1"        , float, None                         ],
+            "prbci"    : ["-3.1"        , float, None                         ],
             "steps"    : ["500"         , int  , lambda x: max(1, x)          ],
-            "dt"       : ["0.002"       , float, lambda x: max(1e-7,x)        ],
-            "cutoff"   : ["-20"         , float, None                         ],
-            "spacing"  : ["5"           , float, None                         ],
+            "dt"       : ["0.1"         , float, lambda x: max(1e-5,x)        ],
+            "cutoff"   : ["-80"         , float, None                         ],
+            "spacing"  : ["10"          , int  , None                         ],
             "calc_type": ["Dynamics"    , str  , None                         ],
             "theta"    : ["180"         , float, lambda x:np.deg2rad(x)       ],
             "plot_type": ["Contour Plot", str  , None                         ]
@@ -109,6 +109,9 @@ class Interactive():
         #Default frame format
         sunken = dict(height = 2, bd = 1, relief = "sunken")
         def gk(string):
+            '''From a string generates a dictionary with the properties
+            of the grid of different elements of the GUI'''
+
             grid   = "".join([s for s in string if s.isdigit()])
             sticky = "".join([s for s in string if s in "news"])
             grid = grid.ljust(6, '0')
@@ -117,7 +120,7 @@ class Interactive():
             if rs: g["rowspan"]    = rs
             if cs: g["columnspan"] = cs
             if px: g["padx"]       = px
-            if py: g["pady"]       = px
+            if py: g["pady"]       = py
 
             if sticky: g["sticky"]   = sticky
             
@@ -137,23 +140,24 @@ class Interactive():
         #Initial Conditions Frame
         values_frame = self._add_frame(dict(master=self.root, text="Initial Conditions", **sunken), gk('202055news'))
         
-        self._add_label(values_frame, {"text": "AB Distance:     "}, gk('00'))
-        self._add_label(values_frame, {"text": "BC Distance:     "}, gk('10'))
-        self._add_label(values_frame, {"text": "AB Momentum:   "  }, gk('20'))
-        self._add_label(values_frame, {"text": "BC Momentum:   "  }, gk('30'))
-        
-        self._add_entry(values_frame, "xrabi", {}, gk('01'), {"width":10}, self.update_geometry_info)
-        self._add_entry(values_frame, "xrbci", {}, gk('11'), {"width":10}, self.update_geometry_info)
-        self._add_entry(values_frame, "prabi", {}, gk('21'), {"width":10}, self.update_geometry_info)
-        self._add_entry(values_frame, "prbci", {}, gk('31'), {"width":10}, self.update_geometry_info)
+        self._add_label(values_frame, {"text": "Distance /\npm"}, gk('01nw'))
+        self._add_label(values_frame, {"text": "Momentum /\ng.mol⁻¹.pm.fs⁻¹"}, gk('02ne'))
+
+        self._add_label(values_frame, {"text": "AB"}, gk('10'))
+        self._add_entry(values_frame, "xrabi", {}, gk('11'), {"width":8}, self.update_geometry_info)
+        self._add_entry(values_frame, "prabi", {}, gk('12'), {"width":8}, self.update_geometry_info)
+
+        self._add_label(values_frame, {"text": "BC"}, gk('20'))
+        self._add_entry(values_frame, "xrbci", {}, gk('21'), {"width":8}, self.update_geometry_info)
+        self._add_entry(values_frame, "prbci", {}, gk('22'), {"width":8}, self.update_geometry_info)
         
         #Angle Frame
-        angle_frame = self._add_frame(dict(master=self.root, text="Collision Angle", **sunken), gk('40news'))
+        angle_frame = self._add_frame(dict(master=self.root, text="Collision Angle /ᴼ", **sunken), gk('400055news'))
         
-        self._add_scale(angle_frame, "theta", {"from_":0, "to":180, "orient":"horizontal"}, gk('00ew'), {"length":200})
+        self._add_scale(angle_frame, "theta", {"from_":0, "to":180, "orient":"horizontal"}, gk('00'), {"length":200})
         
         #Update and Export
-        update_frame = self._add_frame(dict(master=self.root, **sunken), gk('500355news'))
+        update_frame = self._add_frame(dict(master=self.root), gk('500355news'))
         self._add_button(update_frame, {"text": "Update Plot"}      , gk('000055'), {"<Button-1>": self.update_plot })
         self._add_button(update_frame, {"text": "Get Last Geometry"}, gk('010055'), {"<Button-1>": self.get_last_geo})
         self._add_button(update_frame, {"text": "Export Data"}      , gk('020055'), {"<Button-1>": self.export      })
@@ -167,9 +171,15 @@ class Interactive():
             calc_types = [ "Dynamics", "MEP"]
         
         self._add_optionmenu(calc_type_frame, "calc_type", calc_types, {}, gk('00'), {"width":20})
-        
+         #Steps Frame
+        steps_frame = self._add_frame(dict(master=self.root, text="Steps", **sunken), gk('110055news'))
+        self._add_label(steps_frame, {"text": "number"}, gk('00'))
+        self._add_entry(steps_frame, "steps", {}, gk('01'), {"width":5})
+        self._add_label(steps_frame, {"text": "size (fs)"}, gk('02'))
+        self._add_entry(steps_frame, "dt", {}, gk('03'), {"width":5})
+       
         #Plot Type Frame
-        type_frame = self._add_frame(dict(master=self.root, text="Plot Type", **sunken), gk('110055news'))
+        type_frame = self._add_frame(dict(master=self.root, text="Plot Type", **sunken), gk('210055news'))
         
         if advanced:
             plot_types = ["Contour Plot", "Skew Plot", "Surface Plot", "Internuclear Distances vs Time", "Internuclear Velocities vs Time",
@@ -179,38 +189,30 @@ class Interactive():
                 "Momenta vs Time", "Energy vs Time", "Animation"]     
         
         self._add_optionmenu(type_frame, "plot_type", plot_types , {}, gk('00'), {"width":20})
+               
+        #Energy contours Frame
+        energycont_frame = self._add_frame(dict(master=self.root, text="Energy contours /kJ.mol⁻¹", **sunken), gk('312055news'))
+        self._add_label(energycont_frame, {"text": "cutoff"}, gk('00nw'))
+        self._add_scale(energycont_frame, "cutoff",{"from_":0, "to":-400, "resolution":5, "orient":"vertical"}, gk('01'), {"length":100})
         
-        #Steps Frame
-        steps_frame = self._add_frame(dict(master=self.root, text="Steps", **sunken), gk('210055news'))
-        self._add_label(steps_frame, {"text": "  number"}, gk('00'))
-        self._add_entry(steps_frame, "steps", {}, {"row":0, "column":1}, {"width":6})
-        self._add_label(steps_frame, {"text": "  size"}, gk('02'))
-        self._add_entry(steps_frame, "dt", {}, {"row":0, "column":3}, {"width":6})
-        
-        #Cutoff Frame
-        cutoff_frame = self._add_frame(dict(master=self.root, text="Cutoff (kcal/mol)", **sunken), gk('310055news'))
-        self._add_scale(cutoff_frame, "cutoff",{"from_":-100, "to":0, "orient":"horizontal"}, gk('00ew'), {"length":200})
-        
-        #Contour Spacing Frame
-        spacing_frame = self._add_frame(dict(master=self.root, text="Contour Spacing", **sunken), gk('410055news'))
-        self._add_scale( spacing_frame, "spacing", {"from_":0.5, "to":10, "resolution":0.5, "orient":"horizontal"}, gk('00ew'), {"length":200})
+        self._add_label(energycont_frame, {"text": "spacing"}, gk('02ne'))
+        self._add_scale(energycont_frame, "spacing", {"from_":20, "to":1, "resolution":1, "orient":"vertical"}, gk('03'), {"length":100})
         
         #Geometry Info Frame
-        
         geometry_frame = self._add_frame(dict(master=self.root, text="Initial Geometry Information", **sunken), gk('025055news'))
         
         self._add_button(geometry_frame, {"text": "Refresh"}, gk('000055'), {"<Button-1>": self.update_geometry_info})
         
-        energy_frame = self._add_frame(dict(master=geometry_frame, text="Energy", **sunken), gk('100055news'))
-        self._add_label(energy_frame, {"text": "Kinetic:   "}, gk('00'))
-        self._add_label(energy_frame, {"text": "Potential: "}, gk('01'))
-        self._add_label(energy_frame, {"text": "Total:     "}, gk('02')) 
+        energy_frame = self._add_frame(dict(master=geometry_frame, text="Energy /kJ.mol⁻¹", **sunken), gk('100055news'))
+        self._add_label(energy_frame, {"text": "Kinetic"}, gk('00'), {"width":8})
+        self._add_label(energy_frame, {"text": "Potential"}, gk('01'), {"width":8})
+        self._add_label(energy_frame, {"text": "Total"}, gk('02'), {"width":8}) 
         
         self.i_ke   = self._add_label(energy_frame, {"text": ""}, gk('10'))
         self.i_pe   = self._add_label(energy_frame, {"text": ""}, gk('11'))
         self.i_etot = self._add_label(energy_frame, {"text": ""}, gk('12'))
         
-        forces_frame = self._add_frame(dict(master=geometry_frame, text="Forces", **sunken), gk('200055news'))
+        forces_frame = self._add_frame(dict(master=geometry_frame, text="Forces /kJ.mol⁻¹.pm⁻¹", **sunken), gk('200055news'))
         self._add_label(forces_frame, {"text": "along AB: "}, gk('00'))
         self._add_label(forces_frame, {"text": "along BC: "}, gk('10'))
         
@@ -218,19 +220,17 @@ class Interactive():
         self.i_fbc  = self._add_label(forces_frame, {"text": ""}, gk('11'))
         
         hessian_frame = self._add_frame(dict(master=geometry_frame, text="Hessian", **sunken), gk('300055news'))
-        self._add_label(hessian_frame, {"text": "1:         "}, gk('01'))
-        self._add_label(hessian_frame, {"text": "2:         "}, gk('02'))
-        self._add_label(hessian_frame, {"text": "     ω²"}    , gk('10'))
-        self._add_label(hessian_frame, {"text": "AB direction:"}, gk('20'))
-        self._add_label(hessian_frame, {"text": "BC direction:"}, gk('30'))
+        self._add_label(hessian_frame, {"text": "ω² /\nkJ.mol⁻¹.pm⁻²"}, gk('00'))
+        self._add_label(hessian_frame, {"text": "AB direction:"}, gk('10'))
+        self._add_label(hessian_frame, {"text": "BC direction:"}, gk('20'))
         
-        self.i_eval1 = self._add_label(hessian_frame, {"text": ""}, gk('11'))
-        self.i_eval2 = self._add_label(hessian_frame, {"text": ""}, gk('12'))
+        self.i_eval1 = self._add_label(hessian_frame, {"text": ""}, gk('01'))
+        self.i_eval2 = self._add_label(hessian_frame, {"text": ""}, gk('02'))
         
-        self.i_evec11 = self._add_label(hessian_frame, {"text": ""}, gk('21'))
-        self.i_evec12 = self._add_label(hessian_frame, {"text": ""}, gk('22'))
-        self.i_evec21 = self._add_label(hessian_frame, {"text": ""}, gk('31'))
-        self.i_evec22 = self._add_label(hessian_frame, {"text": ""}, gk('32'))
+        self.i_evec11 = self._add_label(hessian_frame, {"text": ""}, gk('11'))
+        self.i_evec12 = self._add_label(hessian_frame, {"text": ""}, gk('12'))
+        self.i_evec21 = self._add_label(hessian_frame, {"text": ""}, gk('21'))
+        self.i_evec22 = self._add_label(hessian_frame, {"text": ""}, gk('22'))
         
         self._add_button(geometry_frame, {"text": "Plot"}, gk('400055'), {"<Button-1>": self.plot_eigen})
         
@@ -356,7 +356,7 @@ class Interactive():
     def get_surface(self):
         """Get the full potential energy surface (Vmat) at specified grid points or rAB and rBC."""
         
-        resl = 0.02 #Resolution
+        resl = 2 #Resolution
         
         #Get grid
         self.x = np.arange(self.plot_limits[0,0],self.plot_limits[0,1],resl)

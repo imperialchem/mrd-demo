@@ -34,8 +34,8 @@ def plot_contour(trajectory,x_grid,y_grid,Vmat,cutoff,spacing):
     ax.get_xaxis().get_major_formatter().set_useOffset(False)
     ax.get_yaxis().get_major_formatter().set_useOffset(False)
     
-    plt.xlabel("AB Distance /Å")
-    plt.ylabel("BC Distance /Å")
+    plt.xlabel("AB Distance/pm")
+    plt.ylabel("BC Distance/pm")
     
     X, Y = np.meshgrid(x_grid, y_grid)
     
@@ -75,8 +75,8 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
     ax.get_xaxis().get_major_formatter().set_useOffset(False)
     ax.get_yaxis().get_major_formatter().set_useOffset(False)
     
-    plt.xlabel("$Q1 /\\AA.g^{1/2}.mol^{-1/2}$")
-    plt.ylabel("$Q2 /\\AA.g^{1/2}.mol^{-1/2}$")
+    plt.xlabel("Q1/$pm.g^{1/2}.mol^{-1/2}$")
+    plt.ylabel("Q2/$pm.g^{1/2}.mol^{-1/2}$")
     
     X, Y = np.meshgrid(x_grid, y_grid)
     
@@ -90,9 +90,9 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
     Q1 = a * X + b * Y * np.cos(beta)
     Q2 = b * Y * np.sin(beta)
     
-    #Plot gridlines every 0.5A
-    splot_grid_x = [x_grid[0]] + list(np.arange(np.ceil(min(x_grid) * 2) / 2, np.floor(max(x_grid) * 2) / 2 + 0.5, 0.5)) + [x_grid[-1]]
-    splot_grid_y = [y_grid[0]] + list(np.arange(np.ceil(min(y_grid) * 2) / 2, np.floor(max(y_grid) * 2) / 2 + 0.5, 0.5)) + [y_grid[-1]]
+    #Plot gridlines every 50pm
+    splot_grid_x = [x_grid[0]] + list(np.arange(np.ceil(min(x_grid) * 2) / 2, np.floor(max(x_grid) * 2) / 2 + 50, 50)) + [x_grid[-1]]
+    splot_grid_y = [y_grid[0]] + list(np.arange(np.ceil(min(y_grid) * 2) / 2, np.floor(max(y_grid) * 2) / 2 + 50, 50)) + [y_grid[-1]]
     
     for x in splot_grid_x:
         r1 = [x, splot_grid_y[ 0]]
@@ -142,15 +142,15 @@ def plot_surface(trajectory,morse_params,sato,x_grid,y_grid,Vmat,cutoff,spacing)
     
     ax = Axes3D(fig_3d)
     
-    plt.xlabel("AB Distance /Å")
-    plt.ylabel("BC Distance /Å")
-    ax.set_zlabel("$V /kcal.mol^{-1}$")
+    plt.xlabel("AB Distance/pm")
+    plt.ylabel("BC Distance/pm")
+    ax.set_zlabel("V/$kJ.mol^{-1}$")
     
     X, Y = np.meshgrid(x_grid, y_grid)
     ax.set_xlim3d([min(x_grid),max(x_grid)])
     ax.set_ylim3d([min(y_grid),max(y_grid)])
     
-    Z = np.clip(Vmat, -200, cutoff)
+    Z = np.clip(Vmat, -800, cutoff)
     
     ax.plot_surface(X, Y, Z, rstride=int(spacing)+1, cstride=int(spacing)+1, cmap='jet', alpha=0.3, linewidth=0.25, edgecolor='black')
 
@@ -175,12 +175,12 @@ def plot_ind_vs_t(trajectory,dt,calc_type):
 
     if calc_type == "Dynamics": 
         xaxis=dt*np.arange(len(trajectory))
-        plt.xlabel("Time")
+        plt.xlabel("Time/fs")
     else:
         xaxis=np.arange(len(trajectory))
         plt.xlabel("Steps")
 
-    plt.ylabel("Distance /Å")
+    plt.ylabel("Distance/pm")
 
     plt.plot(xaxis, trajectory[:,0,0], label = "A-B")
     plt.plot(xaxis, trajectory[:,1,0], label = "B-C")
@@ -215,12 +215,12 @@ def plot_inv_vs_t(trajectory,masses,dt,calc_type):
 
     if calc_type == "Dynamics":
         xaxis=dt*np.arange(len(trajectory))
-        plt.xlabel("Time")
+        plt.xlabel("Time/fs")
     else:
         xaxis=np.arange(len(trajectory))
         plt.xlabel("Steps")
 
-    plt.ylabel("Velocity")
+    plt.ylabel("$Velocity/pm.fs^{-1}$")
 
     plt.plot(xaxis, veloc[:,0], label = "A-B")
     plt.plot(xaxis, veloc[:,1], label = "B-C")
@@ -241,12 +241,12 @@ def plot_momenta_vs_t(trajectory,dt,calc_type):
 
     if calc_type == "Dynamics": 
         xaxis=dt*np.arange(len(trajectory))
-        plt.xlabel("Time")
+        plt.xlabel("Time/fs")
     else:
         xaxis=np.arange(len(trajectory))
         plt.xlabel("Steps")
 
-    plt.ylabel("Momentum")
+    plt.ylabel("$Momentum/g.mol^{-1}.pm.fs^{-1}$")
 
     plt.plot(xaxis, trajectory[:,0,1], label = "A-B")
     plt.plot(xaxis, trajectory[:,1,1], label = "B-C")
@@ -263,8 +263,8 @@ def plot_momenta(trajectory):
     plt.clf()
     ax = plt.gca()
     
-    plt.xlabel("AB Momentum")
-    plt.ylabel("BC Momentum")
+    plt.xlabel("AB Momentum/$g.mol^{-1}.pm.fs^{-1}$")
+    plt.ylabel("BC Momentum/$g.mol^{-1}.pm.fs^{-1}$")
     
     lc = colorline(trajectory[:,0,1], trajectory[:,1,1], cmap = plt.get_cmap("jet"), linewidth=1)
     
@@ -286,8 +286,8 @@ def plot_velocities(trajectory,masses):
     plt.clf()
     ax = plt.gca()
     
-    plt.xlabel("AB Velocity")
-    plt.ylabel("BC Velocity")
+    plt.xlabel("AB Velocity/$pm.fs^{-1}$")
+    plt.ylabel("BC Velocity/$pm.fs^{-1}$")
     
     lc = colorline(veloc[:,0], veloc[:,1], cmap = plt.get_cmap("jet"), linewidth=1)
     
@@ -306,12 +306,12 @@ def plot_e_vs_t(trajectory,masses,morse_params,sato,dt,calc_type):
 
     if calc_type == "Dynamics": 
         xaxis=dt*np.arange(len(trajectory))
-        plt.xlabel("Time")
+        plt.xlabel("Time/fs")
     else:
         xaxis=np.arange(len(trajectory))
         plt.xlabel("Steps")
    
-    plt.ylabel("$E/kcal.mol^{-1}$")
+    plt.ylabel("E/$kJ.mol^{-1}$")
 
     # calculate energies
     V=np.zeros(len(trajectory))
@@ -364,8 +364,8 @@ def animation(trajectory,masses,atom_list,atom_map):
         return ap, bp, cp,
         
     ax = plt.axes(
-    xlim = (min(np.ravel(positions[:,:,0])) - 1, max(np.ravel(positions[:,:,0])) + 1),
-    ylim = (min(np.ravel(positions[:,:,1])) - 1, max(np.ravel(positions[:,:,1])) + 1)
+    xlim = (min(np.ravel(positions[:,:,0])) - 100, max(np.ravel(positions[:,:,0])) + 100),
+    ylim = (min(np.ravel(positions[:,:,1])) - 100, max(np.ravel(positions[:,:,1])) + 100)
     )
     ax.set_aspect('equal')
         
