@@ -90,9 +90,9 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
     Q1 = a * X + b * Y * np.cos(beta)
     Q2 = b * Y * np.sin(beta)
     
-    #Plot gridlines every 50pm
-    splot_grid_x = [x_grid[0]] + list(np.arange(np.ceil(min(x_grid) * 2) / 2, np.floor(max(x_grid) * 2) / 2 + 50, 50)) + [x_grid[-1]]
-    splot_grid_y = [y_grid[0]] + list(np.arange(np.ceil(min(y_grid) * 2) / 2, np.floor(max(y_grid) * 2) / 2 + 50, 50)) + [y_grid[-1]]
+    #Plot gridlines every 30pm
+    splot_grid_x = list(np.arange(x_grid[0], x_grid[-1], 30))+[x_grid[-1]]
+    splot_grid_y = list(np.arange(y_grid[0], y_grid[-1], 30))+[y_grid[-1]]
     
     for x in splot_grid_x:
         r1 = [x, splot_grid_y[ 0]]
@@ -102,7 +102,7 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
         q2 = [a * r2[0] + b * r2[1] * np.cos(beta), b * r2[1] * np.sin(beta)]
               
         plt.plot([q1[0], q2[0]], [q1[1], q2[1]], linewidth=1, color='gray')
-        plt.text(q2[0], q2[1], str(x))
+        plt.text(q2[0], q2[1], str(int(x))) #round label to integer
         
     for y in splot_grid_y:
         r1 = [splot_grid_x[ 0], y]
@@ -112,7 +112,7 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
         q2 = [a * r2[0] + b * r2[1] * np.cos(beta), b * r2[1] * np.sin(beta)]
               
         plt.plot([q1[0], q2[0]], [q1[1], q2[1]], lw=1, color='gray')
-        plt.text(q2[0], q2[1], str(y))
+        plt.text(q2[0], q2[1], str(int(y))) #round label to integer
         
     #Plot transformed PES
     levels = np.arange(np.min(Vmat) -1, cutoff, spacing)
