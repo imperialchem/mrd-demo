@@ -558,16 +558,16 @@ class Interactive():
         if not self.plot_type == "Contour Plot":
             return
 
-        evecs=self.init_point_nmodes
+        evecs=self.init_point_nmodes #columns are eigenvectors/nmodes
         evals=self.init_point_curvature        
 
         plt.arrow(self.trajectory[0,0,0], self.trajectory[0,1,0], 
-            evecs[0][0] * 20, evecs[0][1] * 20,
+            evecs[0,0] * 20, evecs[1,0] * 20,
             color = "blue" if evals[0] > 0 else "red",
             label = "{:+7.3f}".format(evals[0]))
      
         plt.arrow(self.trajectory[0,0,0], self.trajectory[0,1,0], 
-            evecs[1][0] * 20, evecs[1][1] * 20,
+            evecs[1,0] * 20, evecs[1,1] * 20,
             color = "blue" if evals[1] > 0 else "red",
             label = "{:+7.3f}".format(evals[1]))
         

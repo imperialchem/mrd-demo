@@ -180,11 +180,13 @@ def calc_trajectory(coord_init,mom_init,masses,morse_params,sato,steps,dt,calc_t
     mom=mom_init
     step_size=dt
 
-    # If doing an MEP, set initial momenta to zero and increase step size to compensate
-    # absence of inertial term
-    if calc_type == "MEP":
+    # If not doing Dynamics (MEP, Opt Min or Opt TS), set initial momenta to zero
+    if calc_type != "Dynamics":
         mom=np.zeros(3)
-        step_size = 15*dt 
+
+        # If doing a MEP increase step size to compensate absence of inertial term
+        if calc_type == "MEP":
+            step_size = 15*dt
     
     #Initialise outputs
     trajectory = [np.column_stack((coord,mom))]
@@ -208,14 +210,14 @@ def calc_trajectory(coord_init,mom_init,masses,morse_params,sato,steps,dt,calc_t
             eigenvalues, eigenvectors = np.linalg.eigh(hessian)
             
             #Eigenvalue test
-            neg_eig_i = [i for i,eig in enumerate(eigenvalues) if eig < -0.01]
-            if len(neg_eig_i) == 0 and self.calc_type == "Opt TS":
+            neg_eig = [eig for eig in eigenvalues if eig < -1e-14]
+            if len(neg_eig) == 0 and calc_type == "Opt TS":
                 error="Eigenvalues Info::No negative curvatures at this geometry"
                 terminate = True
-            elif len(neg_eig_i) > 1 and self.calc_type == "Opt Min":
+            elif len(neg_eig) > 0 and calc_type == "Opt Min":
                 error="Eigenvalues Error::Too many negative curvatures at this geometry"
                 terminate = True                    
-            elif len(neg_eig_i) > 1:
+            elif len(neg_eig) > 1:
                 error="Eigenvalues Error::Too many negative curvatures at this geometry"
                 terminate = True
             
@@ -223,14 +225,16 @@ def calc_trajectory(coord_init,mom_init,masses,morse_params,sato,steps,dt,calc_t
             disps = np.zeros(3)
             for mode in range(len(eigenvalues)):
                 e_val = eigenvalues[mode]
-                e_vec = eigenvectors[mode]
+                e_vec = eigenvectors[:,mode] #eigenvectors are the columns
 
-                disp = np.dot(np.dot((e_vec.T), -gradient), e_vec) / e_val
+                #disp is a vector with the same direction as e_vec
+                disp = np.dot(e_vec, -gradient) * e_vec / e_val
                 disps += disp
 
             # update positions
-            coord = coord + disps
-            
+            # use dt to scale the step
+            coord = coord + dt*disps
+
         else: #Dynamics/MEP
 
             try:

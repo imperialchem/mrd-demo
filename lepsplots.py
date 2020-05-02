@@ -120,11 +120,11 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
     plt.autoscale()
     plt.axes().set_aspect('equal')
 
+    srab = a * trajectory[:,0,0] + b * trajectory[:,1,0] * np.cos(beta)
+    srbc = b * trajectory[:,1,0] * np.sin(beta)
+
     if max(trajectory[:,2,0])-min(trajectory[:,2,0]) < 1e-7:
         #Plot transformed trajectory
-        srab = a * trajectory[:,0,0] + b * trajectory[:,1,0] * np.cos(beta)
-        srbc = b * trajectory[:,1,0] * np.sin(beta)
-    
         plt.plot(srab, srbc, linestyle='', marker='o', markersize=1.5, color='black')
 
     # highlight initial position
