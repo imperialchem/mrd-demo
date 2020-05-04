@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #Created on Mon May 22 16:59:17 2017
 #
 #@author: Tristan Mackenzie
