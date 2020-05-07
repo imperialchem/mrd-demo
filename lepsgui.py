@@ -48,7 +48,7 @@ class Interactive():
         ###Initialise tkinter###
         self.root = tk.Tk()
         self.root.title("LEPS GUI")
-        self.root.resizable(0,0)
+        self.root.resizable(False,False)
         
         ###Initialise defaults###
         
@@ -140,7 +140,7 @@ class Interactive():
         self._add_optionmenu(selection_frame, "c", self.atoms_list, {}, gk('21'))
         
         #Initial Conditions Frame
-        values_frame = self._add_frame(dict(master=self.root, text="Initial Conditions", **sunken), gk('202055news'))
+        values_frame = self._add_frame(dict(master=self.root, text="Initial Conditions", **sunken), gk('202055nsew'))
         
         self._add_label(values_frame, {"text": "Distance /\npm"}, gk('01nw'))
         self._add_label(values_frame, {"text": "Momentum /\ng.mol⁻¹.pm.fs⁻¹"}, gk('02ne'))
@@ -221,7 +221,7 @@ class Interactive():
         self.i_fab  = self._add_label(forces_frame, {"text": ""}, gk('01'))
         self.i_fbc  = self._add_label(forces_frame, {"text": ""}, gk('11'))
         
-        hessian_frame = self._add_frame(dict(master=geometry_frame, text="Hessian", **sunken), gk('300055news'))
+        hessian_frame = self._add_frame(dict(master=geometry_frame, text="Hessian eigenvalues/vectors", **sunken), gk('300055news'))
         self._add_label(hessian_frame, {"text": "ω² /\nkJ.mol⁻¹.pm⁻²"}, gk('00'))
         self._add_label(hessian_frame, {"text": "AB direction:"}, gk('10'))
         self._add_label(hessian_frame, {"text": "BC direction:"}, gk('20'))
@@ -234,7 +234,7 @@ class Interactive():
         self.i_evec21 = self._add_label(hessian_frame, {"text": ""}, gk('21'))
         self.i_evec22 = self._add_label(hessian_frame, {"text": ""}, gk('22'))
         
-        self._add_button(geometry_frame, {"text": "Plot"}, gk('400055'), {"<Button-1>": self.plot_eigen})
+        self._add_button(geometry_frame, {"text": "Plot eigenvectors"}, gk('400055'), {"<Button-1>": self.plot_eigen})
         
                 
         #Plot
