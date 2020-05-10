@@ -129,31 +129,29 @@ class Interactive():
             return g
         
         #Atoms Selection Frame
-        selection_frame = self._add_frame(dict(master=self.root, text="Atoms", **sunken), gk('002055news'))
+        selection_frame = self._add_frame(dict(master=self.root, text="Atoms", **sunken), gk('000055news'))
         
-        self._add_label(selection_frame, {"text": "Atom A:"}, gk('00'))
-        self._add_label(selection_frame, {"text": "Atom B:"}, gk('10'))
-        self._add_label(selection_frame, {"text": "Atom C:"}, gk('20'))
+        self._add_label(selection_frame, {"text": "A:"}, gk('00'))
+        self._add_label(selection_frame, {"text": "B:"}, gk('02'))
+        self._add_label(selection_frame, {"text": "C:"}, gk('04'))
         
         self._add_optionmenu(selection_frame, "a", self.atoms_list, {}, gk('01'))
-        self._add_optionmenu(selection_frame, "b", self.atoms_list, {}, gk('11'))
-        self._add_optionmenu(selection_frame, "c", self.atoms_list, {}, gk('21'))
+        self._add_optionmenu(selection_frame, "b", self.atoms_list, {}, gk('03'))
+        self._add_optionmenu(selection_frame, "c", self.atoms_list, {}, gk('05'))
         
         #Initial Conditions Frame
-        values_frame = self._add_frame(dict(master=self.root, text="Initial Conditions", **sunken), gk('202055nsew'))
+        values_frame = self._add_frame(dict(master=self.root, text="Initial Conditions", **sunken), gk('103055nsew'))
         
-        self._add_label(values_frame, {"text": "Distance /"}, gk('01ew'))
-        self._add_label(values_frame, {"text": "pm"}, gk('11ew'))
-        self._add_label(values_frame, {"text": "Momentum /"}, gk('02ew'))
-        self._add_label(values_frame, {"text": "g.mol⁻¹.pm.fs⁻¹"}, gk('12ew'))
+        self._add_label(values_frame, {"text": "Distance /\npm"}, gk('01ew'))
+        self._add_label(values_frame, {"text": "Momentum /\ng.mol⁻¹.pm.fs⁻¹"}, gk('02ew'))
 
-        self._add_label(values_frame, {"text": "AB"}, gk('20'))
-        self._add_entry(values_frame, "xrabi", {}, gk('21'), {"width":8}, self.update_geometry_info)
-        self._add_entry(values_frame, "prabi", {}, gk('22'), {"width":8}, self.update_geometry_info)
+        self._add_label(values_frame, {"text": "AB"}, gk('10'))
+        self._add_entry(values_frame, "xrabi", {}, gk('11'), {"width":10}, self.update_geometry_info)
+        self._add_entry(values_frame, "prabi", {}, gk('12'), {"width":10}, self.update_geometry_info)
 
-        self._add_label(values_frame, {"text": "BC"}, gk('30'))
-        self._add_entry(values_frame, "xrbci", {}, gk('31'), {"width":8}, self.update_geometry_info)
-        self._add_entry(values_frame, "prbci", {}, gk('32'), {"width":8}, self.update_geometry_info)
+        self._add_label(values_frame, {"text": "BC"}, gk('20'))
+        self._add_entry(values_frame, "xrbci", {}, gk('21'), {"width":10}, self.update_geometry_info)
+        self._add_entry(values_frame, "prbci", {}, gk('22'), {"width":10}, self.update_geometry_info)
         
         #Angle Frame
         angle_frame = self._add_frame(dict(master=self.root, text="Collision Angle /ᴼ", **sunken), gk('400055news'))
