@@ -22,7 +22,7 @@
 # The variation in total energy seems significant, so a bug is not to be rules out.
 
 import numpy as np
-from numpy.linalg.linalg import LinAlgError
+from numpy.linalg import LinAlgError
 from lepspoint import leps_gradient,leps_hessian
 
 
