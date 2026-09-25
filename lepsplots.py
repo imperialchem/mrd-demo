@@ -24,7 +24,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.collections as mcoll
 from matplotlib.animation import FuncAnimation
-from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.axes3d import Axes3D
 
             
 def plot_contour(trajectory,x_grid,y_grid,Vmat,cutoff,spacing):
@@ -118,7 +118,6 @@ def plot_skew(trajectory,masses,x_grid,y_grid,Vmat,cutoff,spacing):
     levels = np.arange(np.min(Vmat) -1, cutoff, spacing)
     plt.contour(Q1, Q2, Vmat, levels = levels)
     plt.autoscale()
-    plt.axes().set_aspect('equal')
 
     srab = a * trajectory[:,0,0] + b * trajectory[:,1,0] * np.cos(beta)
     srbc = b * trajectory[:,1,0] * np.sin(beta)
@@ -138,9 +137,8 @@ def plot_surface(trajectory,morse_params,sato,x_grid,y_grid,Vmat,cutoff,spacing)
     """3d Surface Plot"""
     
     plt.close('all') #New figure needed for 3D axes
-    fig_3d = plt.figure('Surface Plot', figsize=(5,5))
     
-    ax = Axes3D(fig_3d)
+    ax = plt.axes(projection='3d')
     
     plt.xlabel("AB Distance/pm")
     plt.ylabel("BC Distance/pm")
